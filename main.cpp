@@ -5,6 +5,7 @@
 #include <array>
 #include <string>
 #include <fstream>
+#include <iostream>
 
 using namespace std;
 
@@ -91,7 +92,7 @@ struct __attribute__((packed)) MyPoint {
         ret.x += rhs.x;
         ret.y += rhs.y;
         ret.z += rhs.z;
-        
+
         return ret;
     }
     void print() const {
@@ -166,7 +167,7 @@ struct MyCube {
             vertices[11] = vertices[6] + MyPoint(0.0, radius, 0.0);
         }
         {
-        // left face
+            // left face
             vertices[12].x = center.x - half;
             vertices[12].y = center.y - half;
             vertices[12].z = center.z - half;
@@ -201,18 +202,8 @@ struct MyCube {
             vertices[28] = vertices[24] + MyPoint(radius, 0.0, radius);
             vertices[29] = vertices[24] + MyPoint(0.0, 0.0, radius);
         }
-        
-#if 0
-        // top face
-        -0.25f,  0.25f, 0.25f,
-         0.25f,  0.25f, 0.25f,
-         0.25f,  0.25f, -0.25f,
-        
-        -0.25f,  0.25f, 0.25f,
-         0.25f,  0.25f, -0.25f,
-        -0.25f,  0.25f, -0.25f,
-#endif
         {
+            // top face
             vertices[30].x = center.x - half;
             vertices[30].y = center.y + half;
             vertices[30].z = center.z + half;
@@ -251,7 +242,7 @@ struct MyRubik {
         {45.0f/255.0f,45.0f/255.0f,45.0f/255.0f};//{0.0f, 0.0f, 0.0f};
 
     MyRubik() {}
-        
+
     constexpr static int srcIndices[6][9] = {
         {  0,  1,  2,  3,  4,  5,  6,  7, 8  } // front
        ,{  2, 11, 20,  5, 14, 23,  8, 17, 26 } // right
@@ -260,7 +251,7 @@ struct MyRubik {
        ,{  0,  1,  2,  9, 10, 11, 18, 19, 20 } // down
        ,{  6,  7,  8, 15, 16, 17, 24, 25, 26 } // up
     };
- 
+
     constexpr static int dstIndices[6][9] = {
         {  6,  3,  0,  7,  4,  1,  8,  5,  2 } // front
        ,{  8,  5,  2, 17, 14, 11, 26, 23, 20 } // right
@@ -273,6 +264,7 @@ struct MyRubik {
     void endRot(int type, bool inv = false)
     {
         if (inv) {
+            // Inverse rotation is equivalent to 3 regular rots.
             endRot(type);
             endRot(type);
         }
@@ -313,37 +305,37 @@ struct MyRubik {
         colors[0].setFace(MyCube::LEFT, blue);
         colors[0].setFace(MyCube::FRONT, red);
         colors[0].setFace(MyCube::BOTTOM, white);
-        
+
         cubes[1].set(MyPoint(0.0f, -0.4f, 0.4f), r);
         colors[1].setFace(MyCube::FRONT, red);
         colors[1].setFace(MyCube::BOTTOM, white);
-        
+
         cubes[2].set(MyPoint(0.4f, -0.4f, 0.4f), r);
         colors[2].setFace(MyCube::FRONT, red);
         colors[2].setFace(MyCube::BOTTOM, white);
         colors[2].setFace(MyCube::RIGHT, green);
-        
+
         cubes[3].set(MyPoint(-0.4f, 0.0f, 0.4f), r);
         colors[3].setFace(MyCube::LEFT, blue);
         colors[3].setFace(MyCube::FRONT, red);
-        
+
         cubes[4].set(MyPoint(0.0f, 0.0f, 0.4f), r);
         colors[4].setFace(MyCube::FRONT, red);
-        
+
         cubes[5].set(MyPoint(0.4f, 0.0f, 0.4f), r);
         colors[5].setFace(MyCube::FRONT, red);
         colors[5].setFace(MyCube::RIGHT, green);
-        
+
 
         cubes[6].set(MyPoint(-0.4f, 0.4f, 0.4f), r);
         colors[6].setFace(MyCube::LEFT, blue);
         colors[6].setFace(MyCube::FRONT, red);
         colors[6].setFace(MyCube::TOP, yellow);
-        
+
         cubes[7].set(MyPoint(0.0f, 0.4f, 0.4f), r);
         colors[7].setFace(MyCube::FRONT, red);
         colors[7].setFace(MyCube::TOP, yellow);
-        
+
         cubes[8].set(MyPoint(0.4f, 0.4f, 0.4f), r);
         colors[8].setFace(MyCube::FRONT, red);
         colors[8].setFace(MyCube::RIGHT, green);
@@ -355,7 +347,7 @@ struct MyRubik {
             colors[i+9] = colors[i];
             colors[i+9].setFace(MyCube::FRONT, inside);
         }
-        
+
         for (int i = 0; i < 9; ++i) {
             cubes[i+18] = cubes[i];
             cubes[i+18].addZ(-0.4f*2);
@@ -423,9 +415,10 @@ struct MyApp : public sb6::application
     }
 
     GLuint program;
-    GLuint projMatrixLocation;
+    GLuint projMatrixLocation = -1;
     GLuint mvMatrixLocation;
     GLuint vertexTransformLocation;
+    GLuint passThroughShader;
     bool compileShaders()
     {
         GLuint vertexShader = compileShader("vertex.glsl", GL_VERTEX_SHADER);
@@ -440,10 +433,11 @@ struct MyApp : public sb6::application
         glAttachShader(program, vertexShader);
         glAttachShader(program, fragmentShader);
         glLinkProgram(program);
-        
+
         projMatrixLocation = glGetUniformLocation(program, "projMatrix");
         mvMatrixLocation = glGetUniformLocation(program, "mvMatrix");
         vertexTransformLocation = glGetUniformLocation(program, "vTransform");
+        passThroughShader = glGetUniformLocation(program, "passThroughShader");
 
         GLint status;
         glGetProgramiv(program, GL_LINK_STATUS, &status);
@@ -471,8 +465,18 @@ struct MyApp : public sb6::application
     {
         sb6::application::init();
         info.samples = 4;
+        strcpy(info.title, "CubeSolver");
     }
-    
+
+    GLuint groundVao;
+    GLuint groundVecBuf;
+    GLuint groundColorBuf;
+    GLuint groundNormalBuf;
+
+    MyPoint groundVec[6];
+    MyPoint groundColor[6];
+    MyPoint groundNormal[6];
+
     void startup()
     {
         if (!compileShaders())
@@ -482,21 +486,21 @@ struct MyApp : public sb6::application
         glBindVertexArray(vao);
 
         rubik.set();
-        
+
         glGenBuffers(1, &buffer);
         glBindBuffer(GL_ARRAY_BUFFER, buffer);
         glBufferData(GL_ARRAY_BUFFER, sizeof(rubik.cubes), rubik.cubes,
                      GL_STATIC_DRAW);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
         glEnableVertexAttribArray(0);
-        
+
         glGenBuffers(1, &bufferColor);
         glBindBuffer(GL_ARRAY_BUFFER, bufferColor);
         glBufferData(GL_ARRAY_BUFFER, sizeof(rubik.colors), rubik.colors,
                      GL_STATIC_DRAW);
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
         glEnableVertexAttribArray(1);
-        
+
         glGenBuffers(1, &normals);
         glBindBuffer(GL_ARRAY_BUFFER, normals);
         glBufferData(GL_ARRAY_BUFFER, sizeof(rubik.normals),
@@ -505,11 +509,78 @@ struct MyApp : public sb6::application
         glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, NULL);
         glEnableVertexAttribArray(2);
 
+        constexpr float groundBase = 20.f;
+        constexpr float groundYBase = -1.2f;
+        constexpr float groundYDisp = 0.0f;
+
+        groundVec[0].x = -groundBase;
+        groundVec[0].y = groundYBase;
+        groundVec[0].z = groundBase;
+
+        groundVec[1].x = groundBase;
+        groundVec[1].y = groundYBase;
+        groundVec[1].z = groundBase;
+
+        groundVec[2].x = groundBase;
+        groundVec[2].y = groundYBase + groundYDisp;
+        groundVec[2].z = -groundBase;
+
+        groundVec[3].x = -groundBase;
+        groundVec[3].y = groundYBase;
+        groundVec[3].z = groundBase;
+
+        groundVec[4].x = groundBase;
+        groundVec[4].y = groundYBase + groundYDisp;
+        groundVec[4].z = -groundBase;
+
+        groundVec[5].x = -groundBase;
+        groundVec[5].y = groundYBase + groundYDisp;
+        groundVec[5].z = -groundBase;
+
+        for (int i = 0; i < 6; ++i) {
+            groundColor[i].x = 0.6f;
+            groundColor[i].y = 0.7f;
+            groundColor[i].z = 0.9f;
+        }
+        for (int i = 0; i < 6; ++i) {
+            groundNormal[i].x = 0.0f;
+            groundNormal[i].y = 1.0f;
+            groundNormal[i].z = 0.0f;
+        }
+
+        glGenVertexArrays(1, &groundVao);
+        glBindVertexArray(groundVao);
+
+        glGenBuffers(1, &groundVecBuf);
+        glBindBuffer(GL_ARRAY_BUFFER, groundVecBuf);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(groundVec), groundVec,
+                     GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+        glEnableVertexAttribArray(0);
+
+        glGenBuffers(1, &groundColorBuf);
+        glBindBuffer(GL_ARRAY_BUFFER, groundColorBuf);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(groundColor), groundColor,
+                     GL_STATIC_DRAW);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+        glEnableVertexAttribArray(1);
+
+        glGenBuffers(1, &groundNormalBuf);
+        glBindBuffer(GL_ARRAY_BUFFER, groundNormalBuf);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(groundNormal), groundNormal,
+                     GL_STATIC_DRAW);
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+        glEnableVertexAttribArray(2);
+
         glEnable(GL_CULL_FACE);
         glCullFace(GL_BACK);
-        
+
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_MULTISAMPLE);
+
+        glUniformMatrix4fv(projMatrixLocation, 1, GL_FALSE, projMatrix);
+        glUniformMatrix4fv(vertexTransformLocation, 27, GL_FALSE,
+                           (const GLfloat *) rubik.transforms);
     }
 
     void shutdown()
@@ -524,14 +595,18 @@ struct MyApp : public sb6::application
         sb6::application::onResize(w, h);
         float aspect = (float) info.windowWidth / (float)info.windowHeight;
         projMatrix = vmath::perspective(50.0f, aspect, 0.1f, 1000.0f);
-        //float left, float right, float bottom, float top, float n, float f
-        //projMatrix = vmath::frustum(-2.0f, 2.0f, -2.0f/aspect, 2.0f/aspect, 1.0f, 1000.0f);
+        if (projMatrixLocation != -1) {
+            glUniformMatrix4fv(projMatrixLocation, 1, GL_FALSE, projMatrix);
+        }
     }
 
     MyMatrix mv;
 
-    int xRot = 0;
-    int yRot = 45;
+
+    static constexpr int initxRot = 0;
+    static constexpr int inityRot = 45;
+    int xRot = initxRot;
+    int yRot = inityRot;
     int oldxRot;
     int oldyRot;
 
@@ -539,23 +614,12 @@ struct MyApp : public sb6::application
     bool inViewRot = false;
     double rotStartTime;
     double rotLastFrame;
-#if 0
-    enum {
-        UP = 0
-      , FRONT = 1
-      , RIGHT = 2
-      , LEFT = 3
-      , DOWN = 4
-      , BACK = 5
-    };
-#endif
     struct RotType {
         int rotType = -1;
         bool inverse = false;
     };
     array<RotType, 4> queueRotType;
     RotType curRot;
-    //int queueRotType = -1;
 
     void startRot(RotType r)
     {
@@ -566,7 +630,7 @@ struct MyApp : public sb6::application
                     return;
                 }
             }
-            return;    
+            return;
         }
         curRot = r;
         inRot = true;
@@ -592,7 +656,7 @@ struct MyApp : public sb6::application
           case GLFW_KEY_DOWN: xRot += inc; break;
           case GLFW_KEY_LEFT: yRot -= inc; break;
           case GLFW_KEY_RIGHT: yRot += inc; break;
-          case GLFW_KEY_SPACE: yRot = -15; xRot = 15; break;
+          case GLFW_KEY_SPACE: yRot = inityRot; xRot = initxRot; break;
         }
         if (xRot > 360) {
             xRot -= 360;
@@ -645,7 +709,7 @@ struct MyApp : public sb6::application
         if (action != GLFW_PRESS) {
             return;
         }
-       
+
         MyPoint direction;
         switch (key) {
           case 'U': direction.y = 1.0f; break;
@@ -662,8 +726,8 @@ struct MyApp : public sb6::application
         //ry.rotateY(-yRot / 180.0f * PI);
         //MyMatrix mv = ry * rx;
         MyMatrix rx,ry;
-        rx.rotateX(xRot / 180.0f * PI + 0.1f);
-        ry.rotateY(yRot / 180.0f * PI + 0.1f);
+        rx.rotateX(xRot / 180.0f * PI - 0.1f);
+        ry.rotateY(yRot / 180.0f * PI - 0.1f);
         MyMatrix mv = rx * ry;
         //mv = mv.tranpose();
         float max;
@@ -687,15 +751,16 @@ struct MyApp : public sb6::application
     double start;
     void render(double currentTime)
     {
-        //constexpr GLfloat background[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-        //glClearBufferfv(GL_COLOR, 0, background);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        constexpr GLfloat background[] = { 210.0f/255.0f, 230.0f/255.0f, 255.0f/255.0f, 1.0f };
+        glClearBufferfv(GL_COLOR, 0, background);
+
 
         if (frames == 0) {
             start = currentTime;
         }
         ++frames;
- 
+
         if (inRot) {
             double totalDiff = currentTime - rotStartTime;
             double diff = currentTime - rotLastFrame;
@@ -730,6 +795,8 @@ struct MyApp : public sb6::application
                 t.rotateX(angle);
             }
             rubik.doIncRot(curRot.rotType, t);
+            glUniformMatrix4fv(vertexTransformLocation, 27, GL_FALSE,
+                               (const GLfloat *) rubik.transforms);
             if (totalDiff >= totRotTime) {
                 inRot = false;
                 //puts("end rot");
@@ -754,7 +821,7 @@ struct MyApp : public sb6::application
             }
 
             diff /= totRotTime2;
-            
+
             MyMatrix rx,ry;
             rx.rotateX((xRot * diff + oldxRot*(1.0f - diff)) / 180.0f * PI);
             ry.rotateY((yRot * diff + oldyRot*(1.0f - diff)) / 180.0f * PI);
@@ -780,17 +847,20 @@ struct MyApp : public sb6::application
             ry.rotateY(yRot / 180.0f * PI);
             mv = rx * ry;
         }
+        glUniform1i(passThroughShader, 1);
+        glBindVertexArray(groundVao);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        glUniform1i(passThroughShader, 0);
         mv.set(2, 3, -5.0f);
-        glUniformMatrix4fv(projMatrixLocation, 1, GL_FALSE, projMatrix);
         glUniformMatrix4fv(mvMatrixLocation, 1, GL_FALSE, mv.buf);
-        glUniformMatrix4fv(vertexTransformLocation, 27, GL_FALSE,
-                           (const GLfloat *) rubik.transforms);
-        //glUseProgram(program);
+
+        glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, 0, 36*27);
 
         if (frames == 100) {
             frames = 0;
-            //printf("fps %f\n", 100.0 / (currentTime - start));
+            printf("fps %f\n", 100.0 / (currentTime - start));
         }
     }
 };
