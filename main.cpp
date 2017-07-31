@@ -11,6 +11,20 @@ using namespace std;
 
 constexpr float PI =  3.14159265f;
 
+#define STR(s) #s
+
+#define glCall(x) \
+do { \
+    (x); \
+    GLenum ret = glGetError(); \
+    if (ret != GL_NO_ERROR) { \
+        printf("error: %s returned %d\n", STR(x), int(ret)); \
+        exit(1); \
+    } \
+} while(0)
+
+#define SHADOWMAP_SIZE 4096
+
 namespace {
 string getFileAsString(const char *filename) {
     ifstream ifs(filename);
@@ -27,6 +41,15 @@ struct __attribute__((packed)) MyMatrix {
         0.0f, 1.0f, 0.0f, 0.0f,
         0.0f, 0.0f, 1.0f, 0.0f,
         0.0f, 0.0f, 0.0f, 1.0f};
+
+    MyMatrix(const vmath::mat4 &init) {
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < 4; ++j) {
+                set(i, j, init[j][i]);
+            }
+        }
+    }
+    MyMatrix() = default;
 
     // column major ordering ... confusing
     float get(unsigned char row, unsigned char col) const {
@@ -95,6 +118,21 @@ struct __attribute__((packed)) MyPoint {
 
         return ret;
     }
+    MyPoint operator-(const MyPoint &rhs) const {
+        MyPoint ret = *this;
+        ret.x -= rhs.x;
+        ret.y -= rhs.y;
+        ret.z -= rhs.z;
+
+        return ret;
+    }
+    MyPoint& operator+=(const MyPoint &rhs) {
+        x += rhs.x;
+        y += rhs.y;
+        z += rhs.z;
+
+        return *this;
+    }
     void print() const {
         printf("%.3f %.3f %.3f\n", x, y, z);
     }
@@ -110,6 +148,26 @@ struct __attribute__((packed)) MyPoint {
     }
     GLfloat dot(const MyPoint& rhs) const {
         return x*rhs.x+y*rhs.y+z*rhs.z;
+    }
+    MyPoint cross(const MyPoint& rhs) const {
+        MyPoint ret;
+        ret.x = y*rhs.z - z * rhs.y;
+        ret.y = z*rhs.x - x * rhs.z;
+        ret.z = x*rhs.y - y * rhs.x;
+        return ret;
+    }
+
+    float length() const {
+        return sqrt(x*x+y*y+z*z);
+    }
+
+    void normalize() {
+        float l = length();
+        if (l != 0.0) {
+            x /= l;
+            y /= l;
+            z /= l;
+        }
     }
 };
 
@@ -136,6 +194,13 @@ struct MyCube {
     {
         for (int i = 0; i < 6; ++i) {
             vertices[face * 6 + i] = p;
+        }
+    }
+
+    void addToFace(int face, MyPoint p)
+    {
+        for (int i = 0; i < 6; ++i) {
+            vertices[face * 6 + i] += p;
         }
     }
 
@@ -224,11 +289,60 @@ struct MyCube {
 
 };
 
+MyMatrix lookAt(const MyPoint& eye, const MyPoint& center, const MyPoint& up)
+{
+    MyMatrix ret;
+#if 0
+    MyPoint f = (center - eye);
+    f.normalize();
+    MyPoint s = f.cross(up);
+    s.normalize();
+    MyPoint u = s.cross(f);
+    ret.set(0, 0, s.x);
+    ret.set(1, 0, s.y);
+    ret.set(2, 0, s.z);
+    ret.set(0, 1, u.x);
+    ret.set(1, 1, u.y);
+    ret.set(2, 1, u.z);
+    ret.set(0, 2, -f.x);
+    ret.set(1, 2, -f.y);
+    ret.set(2, 2, -f.y);
+    ret.set(3, 0, -s.dot(eye));
+    ret.set(3, 1, -u.dot(eye));
+    ret.set(3, 2,  f.dot(eye));
+#endif
+    vmath::mat4 l = vmath::lookat(vmath::vec3(eye.x,eye.y,eye.z),
+                           vmath::vec3(center.x,center.y,center.z),
+                           vmath::vec3(up.x,up.y,up.z));
+#if 0
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            printf("%f ", ret.get(i,j));
+        }
+    }
+    puts("");
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            printf("%f ", l[i][j]);
+        }
+    }
+    puts("");
+    //memcpy(&ret, &l, sizeof(ret));
+#endif
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            ret.set(i, j, l[j][i]);
+        }
+    }
+
+    return ret;
+}
+
 struct MyRubik {
     MyCube cubes[27];
     MyCube colors[27];
     MyCube normals[27];
-    MyMatrix transforms[27];
+    MyMatrix transforms[28];
     int pos[27];
     MyPoint faceNormal[6];
 
@@ -285,6 +399,19 @@ struct MyRubik {
         }
     }
 
+    void setVisibleFace(int cubeIdx, int face, MyPoint color, float r)
+    {
+        colors[cubeIdx].setFace(face, color);
+        //constexpr MyPoint adj(-0.01f,-0.01f,-0.01f);
+        //cubes[cubeIdx].addToFace(face, adj);
+    }
+    void setInvisibleFace(int cubeIdx, int face, MyPoint color, float r)
+    {
+        colors[cubeIdx].setFace(face, color);
+        //constexpr MyPoint adj(0.01f,0.01f,0.01f);
+        //cubes[cubeIdx].addToFace(face, adj);
+    }
+
     void set() {
         faceNormal[0].z = 1;
         faceNormal[1].x = 1;
@@ -293,7 +420,7 @@ struct MyRubik {
         faceNormal[4].y = -1;
         faceNormal[5].y = 1;
 
-        float r = 0.39f;
+        float r = 0.39f;//4f;
 
         for (int i = 0; i < 27; ++i) {
             for (int j = 0; j < 36; ++j) {
@@ -302,59 +429,59 @@ struct MyRubik {
         }
 
         cubes[0].set(MyPoint(-0.4f, -0.4f, 0.4f), r);
-        colors[0].setFace(MyCube::LEFT, blue);
-        colors[0].setFace(MyCube::FRONT, red);
-        colors[0].setFace(MyCube::BOTTOM, white);
+        setVisibleFace(0, MyCube::LEFT, blue, r);
+        setVisibleFace(0, MyCube::FRONT, red, r);
+        setVisibleFace(0, MyCube::BOTTOM, white, r);
 
         cubes[1].set(MyPoint(0.0f, -0.4f, 0.4f), r);
-        colors[1].setFace(MyCube::FRONT, red);
-        colors[1].setFace(MyCube::BOTTOM, white);
+        setVisibleFace(1, MyCube::FRONT, red, r);
+        setVisibleFace(1, MyCube::BOTTOM, white, r);
 
         cubes[2].set(MyPoint(0.4f, -0.4f, 0.4f), r);
-        colors[2].setFace(MyCube::FRONT, red);
-        colors[2].setFace(MyCube::BOTTOM, white);
-        colors[2].setFace(MyCube::RIGHT, green);
+        setVisibleFace(2, MyCube::FRONT, red, r);
+        setVisibleFace(2, MyCube::BOTTOM, white, r);
+        setVisibleFace(2, MyCube::RIGHT, green, r);
 
         cubes[3].set(MyPoint(-0.4f, 0.0f, 0.4f), r);
-        colors[3].setFace(MyCube::LEFT, blue);
-        colors[3].setFace(MyCube::FRONT, red);
+        setVisibleFace(3, MyCube::LEFT, blue, r);
+        setVisibleFace(3, MyCube::FRONT, red, r);
 
         cubes[4].set(MyPoint(0.0f, 0.0f, 0.4f), r);
-        colors[4].setFace(MyCube::FRONT, red);
+        setVisibleFace(4, MyCube::FRONT, red, r);
 
         cubes[5].set(MyPoint(0.4f, 0.0f, 0.4f), r);
-        colors[5].setFace(MyCube::FRONT, red);
-        colors[5].setFace(MyCube::RIGHT, green);
-
+        setVisibleFace(5, MyCube::FRONT, red, r);
+        setVisibleFace(5, MyCube::RIGHT, green, r);
 
         cubes[6].set(MyPoint(-0.4f, 0.4f, 0.4f), r);
-        colors[6].setFace(MyCube::LEFT, blue);
-        colors[6].setFace(MyCube::FRONT, red);
-        colors[6].setFace(MyCube::TOP, yellow);
+        setVisibleFace(6, MyCube::LEFT, blue, r);
+        setVisibleFace(6, MyCube::FRONT, red, r);
+        setVisibleFace(6, MyCube::TOP, yellow, r);
 
         cubes[7].set(MyPoint(0.0f, 0.4f, 0.4f), r);
-        colors[7].setFace(MyCube::FRONT, red);
-        colors[7].setFace(MyCube::TOP, yellow);
+        setVisibleFace(7, MyCube::FRONT, red, r);
+        setVisibleFace(7, MyCube::TOP, yellow, r);
 
         cubes[8].set(MyPoint(0.4f, 0.4f, 0.4f), r);
-        colors[8].setFace(MyCube::FRONT, red);
-        colors[8].setFace(MyCube::RIGHT, green);
-        colors[8].setFace(MyCube::TOP, yellow);
+        setVisibleFace(8, MyCube::FRONT, red, r);
+        setVisibleFace(8, MyCube::RIGHT, green, r);
+        setVisibleFace(8, MyCube::TOP, yellow, r);
 
         for (int i = 0; i < 9; ++i) {
             cubes[i+9] = cubes[i];
             cubes[i+9].addZ(-0.4f);
             colors[i+9] = colors[i];
-            colors[i+9].setFace(MyCube::FRONT, inside);
+            setInvisibleFace(i+9, MyCube::FRONT, inside, r);
         }
 
         for (int i = 0; i < 9; ++i) {
             cubes[i+18] = cubes[i];
             cubes[i+18].addZ(-0.4f*2);
             colors[i+18] = colors[i];
-            colors[i+18].setFace(MyCube::FRONT, inside);
-            colors[i+18].setFace(MyCube::BACK, orange);
+            setInvisibleFace(i+18, MyCube::FRONT, inside, r);
+            setVisibleFace(i+18, MyCube::BACK, orange, r);
         }
+
         for (int i = 0; i < 27; ++i) {
             normals[i].setFace(MyCube::FRONT, MyPoint(0.0f, 0.0f, 1.0f));
             normals[i].setFace(MyCube::BACK, MyPoint(0.0f, 0.0f, -1.0f));
@@ -415,10 +542,31 @@ struct MyApp : public sb6::application
     }
 
     GLuint program;
+    GLuint shadowProgram;
+    GLuint debugProgram;
     GLuint projMatrixLocation = -1;
     GLuint mvMatrixLocation;
     GLuint vertexTransformLocation;
     GLuint passThroughShader;
+    GLuint shadowMapID;
+    GLuint shadowMvpLoc;
+
+    GLuint shadowMvLoc;
+    GLuint shadowPerspectiveLoc;
+    GLuint shadowVertexTransformLoc;
+
+    GLuint getUniform(GLuint program, const char *name)
+    {
+        GLint ret = glGetUniformLocation(program, name);
+        if (ret < 0) {
+            printf("glGetUniformLocation for %s failed %d. glError %d\n",
+                   name, ret, int(glGetError()));
+            exit(1);
+        }
+        return ret;
+    }
+
+    GLuint debugTexIDLoc;
     bool compileShaders()
     {
         GLuint vertexShader = compileShader("vertex.glsl", GL_VERTEX_SHADER);
@@ -434,10 +582,12 @@ struct MyApp : public sb6::application
         glAttachShader(program, fragmentShader);
         glLinkProgram(program);
 
-        projMatrixLocation = glGetUniformLocation(program, "projMatrix");
-        mvMatrixLocation = glGetUniformLocation(program, "mvMatrix");
-        vertexTransformLocation = glGetUniformLocation(program, "vTransform");
-        passThroughShader = glGetUniformLocation(program, "passThroughShader");
+        projMatrixLocation = getUniform(program, "projMatrix");
+        mvMatrixLocation = getUniform(program, "mvMatrix");
+        vertexTransformLocation = getUniform(program, "vTransform");
+        passThroughShader = getUniform(program, "passThroughShader");
+        shadowMapID = getUniform(program, "shadowMap");
+        shadowMvpLoc = getUniform(program, "shadowMvp");
 
         GLint status;
         glGetProgramiv(program, GL_LINK_STATUS, &status);
@@ -449,6 +599,52 @@ struct MyApp : public sb6::application
 
         glDeleteShader(vertexShader);
         glDeleteShader(fragmentShader);
+
+        vertexShader = compileShader("vertex_shadowmap.glsl", GL_VERTEX_SHADER);
+        fragmentShader = compileShader("fragment_shadowmap.glsl",
+                                       GL_FRAGMENT_SHADER);
+
+        if (!vertexShader || !fragmentShader) {
+            return false;
+        }
+
+        shadowProgram = glCreateProgram();
+
+        glAttachShader(shadowProgram, vertexShader);
+        glAttachShader(shadowProgram, fragmentShader);
+        glLinkProgram(shadowProgram);
+
+        shadowPerspectiveLoc = getUniform(shadowProgram, "projMatrix");
+        shadowMvLoc = getUniform(shadowProgram, "mvMatrix");
+        shadowVertexTransformLoc = getUniform(shadowProgram, "vTransform");
+
+        glGetProgramiv(shadowProgram, GL_LINK_STATUS, &status);
+        if (status != GL_TRUE) {
+            printf("link program failed: %s\n", getProgramLog(shadowProgram).c_str());
+            return false;
+        }
+
+        vertexShader = compileShader("vertex_passthrough.glsl", GL_VERTEX_SHADER);
+        fragmentShader = compileShader("fragment_texture.glsl",
+                                       GL_FRAGMENT_SHADER);
+
+        if (!vertexShader || !fragmentShader) {
+            return false;
+        }
+
+        debugProgram = glCreateProgram();
+
+        glAttachShader(debugProgram, vertexShader);
+        glAttachShader(debugProgram, fragmentShader);
+        glLinkProgram(debugProgram);
+
+        glGetProgramiv(debugProgram, GL_LINK_STATUS, &status);
+        if (status != GL_TRUE) {
+            printf("link program failed: %s\n", getProgramLog(debugProgram).c_str());
+            return false;
+        }
+        debugTexIDLoc = getUniform(debugProgram, "text");
+
         glUseProgram(program);
 
         return true;
@@ -464,11 +660,12 @@ struct MyApp : public sb6::application
     void init()
     {
         sb6::application::init();
+        setVsync(false);
         info.samples = 4;
         strcpy(info.title, "CubeSolver");
     }
 
-    GLuint groundVao;
+    // GLuint groundVao;
     GLuint groundVecBuf;
     GLuint groundColorBuf;
     GLuint groundNormalBuf;
@@ -477,6 +674,45 @@ struct MyApp : public sb6::application
     MyPoint groundColor[6];
     MyPoint groundNormal[6];
 
+    GLuint frameBuf;
+    GLuint depthTexture;
+
+    void initFrameBuf()
+    {
+
+        glCall(glGenFramebuffers(1, &frameBuf));
+        glCall(glBindFramebuffer(GL_FRAMEBUFFER, frameBuf));
+
+        glCall(glGenTextures(1, &depthTexture));
+        glCall(glBindTexture(GL_TEXTURE_2D, depthTexture));
+        glCall(glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, SHADOWMAP_SIZE, SHADOWMAP_SIZE, 0,
+                     GL_DEPTH_COMPONENT, GL_FLOAT, 0));
+        glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
+        glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
+        glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+        glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+        glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL));
+        glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE,
+                        GL_COMPARE_REF_TO_TEXTURE));
+
+        glCall(glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                                    depthTexture, 0));
+
+        glDrawBuffer(GL_NONE);
+        glReadBuffer(GL_NONE);
+
+        GLenum ret = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (ret != GL_FRAMEBUFFER_COMPLETE) {
+            printf("yo %d\n", int(ret));
+            ret = glGetError();
+            printf("yo %d\n", int(ret));
+            exit(1);
+        }
+
+        // glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+	GLuint quad_vertexbuffer;
     void startup()
     {
         if (!compileShaders())
@@ -487,30 +723,37 @@ struct MyApp : public sb6::application
 
         rubik.set();
 
+
         glGenBuffers(1, &buffer);
         glBindBuffer(GL_ARRAY_BUFFER, buffer);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(rubik.cubes), rubik.cubes,
-                     GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(rubik.cubes) + sizeof(groundVec),
+                     NULL, GL_STATIC_DRAW);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(rubik.cubes), rubik.cubes);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
         glEnableVertexAttribArray(0);
 
         glGenBuffers(1, &bufferColor);
         glBindBuffer(GL_ARRAY_BUFFER, bufferColor);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(rubik.colors), rubik.colors,
+        glBufferData(GL_ARRAY_BUFFER, sizeof(rubik.colors) + sizeof(groundColor)
+                     , NULL,
                      GL_STATIC_DRAW);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(rubik.colors), rubik.colors);
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
         glEnableVertexAttribArray(1);
 
         glGenBuffers(1, &normals);
         glBindBuffer(GL_ARRAY_BUFFER, normals);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(rubik.normals),
-                     rubik.normals,
+        glBufferData(GL_ARRAY_BUFFER,
+                     sizeof(rubik.normals)+sizeof(groundNormal),
+                     NULL,
                      GL_STATIC_DRAW);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(rubik.normals),
+                        rubik.normals);
         glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, NULL);
         glEnableVertexAttribArray(2);
 
-        constexpr float groundBase = 20.f;
-        constexpr float groundYBase = -1.2f;
+        constexpr float groundBase = 50.f;
+        constexpr float groundYBase = -1.0f;
         constexpr float groundYDisp = 0.0f;
 
         groundVec[0].x = -groundBase;
@@ -548,39 +791,50 @@ struct MyApp : public sb6::application
             groundNormal[i].z = 0.0f;
         }
 
-        glGenVertexArrays(1, &groundVao);
-        glBindVertexArray(groundVao);
+        glBindBuffer(GL_ARRAY_BUFFER, buffer);
+        glBufferSubData(GL_ARRAY_BUFFER, sizeof(rubik.cubes),
+                        sizeof(groundVec), groundVec);
 
-        glGenBuffers(1, &groundVecBuf);
-        glBindBuffer(GL_ARRAY_BUFFER, groundVecBuf);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(groundVec), groundVec,
-                     GL_STATIC_DRAW);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-        glEnableVertexAttribArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, bufferColor);
+        glBufferSubData(GL_ARRAY_BUFFER, sizeof(rubik.colors),
+                        sizeof(groundColor), groundColor);
 
-        glGenBuffers(1, &groundColorBuf);
-        glBindBuffer(GL_ARRAY_BUFFER, groundColorBuf);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(groundColor), groundColor,
-                     GL_STATIC_DRAW);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-        glEnableVertexAttribArray(1);
-
-        glGenBuffers(1, &groundNormalBuf);
-        glBindBuffer(GL_ARRAY_BUFFER, groundNormalBuf);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(groundNormal), groundNormal,
-                     GL_STATIC_DRAW);
-        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-        glEnableVertexAttribArray(2);
+        glBindBuffer(GL_ARRAY_BUFFER, normals);
+        glBufferSubData(GL_ARRAY_BUFFER, sizeof(rubik.normals),
+                        sizeof(groundNormal), groundNormal);
 
         glEnable(GL_CULL_FACE);
         glCullFace(GL_BACK);
 
         glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LESS);
         glEnable(GL_MULTISAMPLE);
 
         glUniformMatrix4fv(projMatrixLocation, 1, GL_FALSE, projMatrix);
-        glUniformMatrix4fv(vertexTransformLocation, 27, GL_FALSE,
+        glUniformMatrix4fv(vertexTransformLocation, 28, GL_FALSE,
                            (const GLfloat *) rubik.transforms);
+        glUseProgram(shadowProgram);
+        glUniformMatrix4fv(shadowVertexTransformLoc, 28, GL_FALSE,
+                           (const GLfloat *) rubik.transforms);
+        glUseProgram(program);
+
+        // The quad's FBO. Used only for visualizing the shadowmap.
+        static const GLfloat g_quad_vertex_buffer_data[] = {
+		-1.0f, -1.0f, 0.0f,
+		 1.0f, -1.0f, 0.0f,
+		-1.0f,  1.0f, 0.0f,
+		-1.0f,  1.0f, 0.0f,
+		 1.0f, -1.0f, 0.0f,
+		 1.0f,  1.0f, 0.0f,
+        };
+
+	glGenBuffers(1, &quad_vertexbuffer);
+	glBindBuffer(GL_ARRAY_BUFFER, quad_vertexbuffer);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(g_quad_vertex_buffer_data), g_quad_vertex_buffer_data, GL_STATIC_DRAW);
+
+        initFrameBuf();
+        //glEnable(GL_CULL_FACE);
+        //glCullFace(GL_BACK);
     }
 
     void shutdown()
@@ -600,7 +854,6 @@ struct MyApp : public sb6::application
         }
     }
 
-    MyMatrix mv;
 
 
     static constexpr int initxRot = 0;
@@ -751,11 +1004,7 @@ struct MyApp : public sb6::application
     double start;
     void render(double currentTime)
     {
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        constexpr GLfloat background[] = { 210.0f/255.0f, 230.0f/255.0f, 255.0f/255.0f, 1.0f };
-        glClearBufferfv(GL_COLOR, 0, background);
-
-
+        MyMatrix mv;
         if (frames == 0) {
             start = currentTime;
         }
@@ -795,8 +1044,12 @@ struct MyApp : public sb6::application
                 t.rotateX(angle);
             }
             rubik.doIncRot(curRot.rotType, t);
-            glUniformMatrix4fv(vertexTransformLocation, 27, GL_FALSE,
-                               (const GLfloat *) rubik.transforms);
+            glUseProgram(program);
+            glCall(glUniformMatrix4fv(vertexTransformLocation, 28, GL_FALSE,
+                               (const GLfloat *) rubik.transforms));
+            glUseProgram(shadowProgram);
+            glCall(glUniformMatrix4fv(shadowVertexTransformLoc, 28, GL_FALSE,
+                               (const GLfloat *) rubik.transforms));
             if (totalDiff >= totRotTime) {
                 inRot = false;
                 //puts("end rot");
@@ -847,26 +1100,119 @@ struct MyApp : public sb6::application
             ry.rotateY(yRot / 180.0f * PI);
             mv = rx * ry;
         }
+        MyMatrix gmv;
+
+        gmv.set(2, 3, -5.0f);
+        mv.set(2, 3, -5.0f);
+#if 1
+
+        glBindFramebuffer(GL_FRAMEBUFFER, frameBuf);
+        glViewport(0,0,SHADOWMAP_SIZE,SHADOWMAP_SIZE);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        constexpr GLfloat b[] = { 0.0f,0.0f,0.0f };
+        glClearBufferfv(GL_COLOR, 0, b);
+        glUseProgram(shadowProgram);
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+#if 0
+        MyPoint lightPos(2.0f,4.0f, -4.0f);
+        MyPoint lightInvDir = MyPoint(1.0f,2.5,0.4);
+        MyMatrix l = lookAt(lightPos, lightPos - lightInvDir, MyPoint(0,1,0));
+        vmath::mat4 p = vmath::perspective(50.0f, 1.0f, 0.1f, 50.0f);
+#else
+        //MyPoint lightInvDir(1.0f,2.5,1.0);
+        MyPoint lightInvDir(1.0f,3.0f,1.0f);
+        //MyMatrix p = MyMatrix(vmath::ortho(-30, 30, -30, 30, -30, 30));
+        //MyMatrix p = MyMatrix(vmath::ortho(-30, 30, -30, 30, -30, 30));
+        MyMatrix p = MyMatrix(vmath::ortho(-5, 5, -5, 5, -10, 0));
+        //MyMatrix p = MyMatrix(vmath::ortho(-10, 10, -10, 10, 1.0, 10));
+        //vmath::mat4 p = vmath::ortho(-5, 5, -5, 5, -5, 5);
+        //vmath::mat4 p = vmath::ortho(0.5f, 4, 0, 3, -5, 1);
+        MyMatrix l = lookAt(lightInvDir, MyPoint(), MyPoint(0,1,0));
+#endif
+
+        glUniformMatrix4fv(shadowPerspectiveLoc, 1, GL_FALSE, p.buf);
+        MyMatrix yo = l * mv;
+        glCall(glUniformMatrix4fv(shadowMvLoc, 1, GL_FALSE, yo.buf));
+        glDrawArrays(GL_TRIANGLES, 0, 36*27);
+
+        //yo = l * gmv;
+        //glCall(glUniformMatrix4fv(shadowMvLoc, 1, GL_FALSE, yo.buf));
+        //glDrawArrays(GL_TRIANGLES, 36*27, 6);
+
+        // Switch back
+        glUseProgram(program);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0,0,info.windowWidth,info.windowHeight);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, depthTexture);
+        glUniform1i(shadowMapID, 0);
+#else
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+#endif
+        constexpr GLfloat background[] = { 210.0f/255.0f, 230.0f/255.0f, 255.0f/255.0f, 1.0f };
+        glClearBufferfv(GL_COLOR, 0, background);
+
+        //p.reset();
         glUniform1i(passThroughShader, 1);
-        glBindVertexArray(groundVao);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glUniformMatrix4fv(mvMatrixLocation, 1, GL_FALSE, gmv.buf);
+        yo = l * gmv;
+        yo = p * yo;
+        glCall(glUniformMatrix4fv(shadowMvpLoc, 1, GL_FALSE, yo.buf));
+        glDrawArrays(GL_TRIANGLES, 36*27, 6);
 
         glUniform1i(passThroughShader, 0);
-        mv.set(2, 3, -5.0f);
+        yo = l * mv;
+        yo = p * yo;
+        glUniformMatrix4fv(shadowMvpLoc, 1, GL_FALSE, yo.buf);
         glUniformMatrix4fv(mvMatrixLocation, 1, GL_FALSE, mv.buf);
 
-        glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, 0, 36*27);
+
+#if 0
+        glUseProgram(debugProgram);
+        glDisableVertexAttribArray(0);
+        glDisableVertexAttribArray(1);
+        glDisableVertexAttribArray(2);
+
+        glViewport(0, 0, 256, 256);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, depthTexture);
+        glUniform1i(debugTexIDLoc, 0);
+
+        glEnableVertexAttribArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, quad_vertexbuffer);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        glDisableVertexAttribArray(0);
+
+        glBindBuffer(GL_ARRAY_BUFFER, buffer);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+        glEnableVertexAttribArray(0);
+
+        glBindBuffer(GL_ARRAY_BUFFER, bufferColor);
+
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+        glEnableVertexAttribArray(1);
+
+        glBindBuffer(GL_ARRAY_BUFFER, normals);
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+        glEnableVertexAttribArray(2);
+#endif
 
         if (frames == 100) {
             frames = 0;
-            printf("fps %f\n", 100.0 / (currentTime - start));
+            // printf("fps %f\n", 100.0 / (currentTime - start));
         }
     }
 };
 
-//constexpr GLfloat MyApp::vertices[];
-//constexpr GLfloat MyApp::colors[];
 constexpr MyPoint MyRubik::red;
 constexpr MyPoint MyRubik::green;
 constexpr MyPoint MyRubik::blue;

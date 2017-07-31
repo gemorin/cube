@@ -5,15 +5,26 @@ layout (location = 1) in vec3 color;
 layout (location = 2) in vec3 normal;
 uniform mat4 projMatrix;
 uniform mat4 mvMatrix;
-uniform mat4 vTransform[27];
+uniform mat4 shadowMvp;
+uniform mat4 vTransform[28];
 uniform int passThroughShader;
 
 out vec3 vsColor;
 out vec3 vertPos;
 out vec3 outNormal;
+out vec4 shadowCoord;
+
+const mat4 depthBias = mat4(
+0.5, 0.0, 0.0, 0.0,
+0.0, 0.5, 0.0, 0.0,
+0.0, 0.0, 0.5, 0.0,
+0.5, 0.5, 0.5, 1.0);
 
 void main(void)
 {
+    shadowCoord = (depthBias * shadowMvp * vec4(position, 1.0));
+    // shadowCoord = shadowMvp * vec4(position, 1.0);
+    vsColor = color;
     if (passThroughShader == 0) {
         mat4 trans = mvMatrix * vTransform[gl_VertexID/36];
         mat4 nTrans = inverse(trans);
@@ -21,11 +32,9 @@ void main(void)
         vec4 pos = trans * vec4(position, 1.0f);
         gl_Position = projMatrix * pos;
         outNormal = (trans * vec4(normal, 0.0f)).xyz;
-        vsColor = color;
         vertPos = vec3(pos.xyz) / pos.w;
     }
     else {
-        gl_Position = projMatrix * vec4(position, 1.0f);
-        vsColor = color;
+        gl_Position = projMatrix * mvMatrix * vec4(position, 1.0f);
     }
 }
