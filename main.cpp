@@ -1,13 +1,18 @@
-#include <sb6.h>
-#include <vmath.h>
-
 #include <cmath>
+#include <cstring>
 #include <array>
 #include <string>
 #include <fstream>
 #include <iostream>
 
 using namespace std;
+
+
+#define GLFW_NO_GLU 1
+#define GLFW_INCLUDE_GLCOREARB 1
+extern "C" {
+#include "GLFW/glfw3.h"
+}
 
 constexpr float PI =  3.14159265f;
 
@@ -42,14 +47,19 @@ struct __attribute__((packed)) MyMatrix {
         0.0f, 0.0f, 1.0f, 0.0f,
         0.0f, 0.0f, 0.0f, 1.0f};
 
-    MyMatrix(const vmath::mat4 &init) {
-        for (int i = 0; i < 4; ++i) {
-            for (int j = 0; j < 4; ++j) {
-                set(i, j, init[j][i]);
-            }
-        }
-    }
     MyMatrix() = default;
+
+    void print()
+    {
+        printf("[ %3.2f %3.2f %3.2f %3.2f ]\n"
+               "[ %3.2f %3.2f %3.2f %3.2f ]\n"
+               "[ %3.2f %3.2f %3.2f %3.2f ]\n"
+               "[ %3.2f %3.2f %3.2f %3.2f ]\n",
+               get(0, 0), get(0, 1), get(0, 2), get(0, 3),
+               get(1, 0), get(1, 1), get(1, 2), get(1, 3),
+               get(2, 0), get(2, 1), get(2, 2), get(2, 3),
+               get(3, 0), get(3, 1), get(3, 2), get(3, 3));
+    }
 
     // column major ordering ... confusing
     float get(unsigned char row, unsigned char col) const {
@@ -93,7 +103,7 @@ struct __attribute__((packed)) MyMatrix {
         }
         return ret;
     }
-    MyMatrix tranpose() const {
+    MyMatrix transpose() const {
         MyMatrix ret;
         for (int i = 0; i < 4; ++i) {
             for (int j = 0; j < 4; ++j) {
@@ -292,50 +302,26 @@ struct MyCube {
 MyMatrix lookAt(const MyPoint& eye, const MyPoint& center, const MyPoint& up)
 {
     MyMatrix ret;
-#if 0
     MyPoint f = (center - eye);
     f.normalize();
-    MyPoint s = f.cross(up);
-    s.normalize();
+    MyPoint upn(up);
+    upn.normalize();
+    MyPoint s = f.cross(upn);
     MyPoint u = s.cross(f);
-    ret.set(0, 0, s.x);
-    ret.set(1, 0, s.y);
-    ret.set(2, 0, s.z);
-    ret.set(0, 1, u.x);
-    ret.set(1, 1, u.y);
-    ret.set(2, 1, u.z);
-    ret.set(0, 2, -f.x);
-    ret.set(1, 2, -f.y);
-    ret.set(2, 2, -f.y);
-    ret.set(3, 0, -s.dot(eye));
-    ret.set(3, 1, -u.dot(eye));
-    ret.set(3, 2,  f.dot(eye));
-#endif
-    vmath::mat4 l = vmath::lookat(vmath::vec3(eye.x,eye.y,eye.z),
-                           vmath::vec3(center.x,center.y,center.z),
-                           vmath::vec3(up.x,up.y,up.z));
-#if 0
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            printf("%f ", ret.get(i,j));
-        }
-    }
-    puts("");
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            printf("%f ", l[i][j]);
-        }
-    }
-    puts("");
-    //memcpy(&ret, &l, sizeof(ret));
-#endif
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            ret.set(i, j, l[j][i]);
-        }
-    }
-
-    return ret;
+    MyMatrix result;
+    result.set(0, 0, s.x);
+    result.set(0, 1, s.y);
+    result.set(0, 2, s.z);
+    result.set(1, 0, u.x);
+    result.set(1, 1, u.y);
+    result.set(1, 2, u.z);
+    result.set(2, 0, -f.x);
+    result.set(2, 1, -f.y);
+    result.set(2, 2, -f.z);
+    result.set(0, 3, -eye.x);
+    result.set(1, 3, -eye.y);
+    result.set(2, 3, -eye.z);
+    return result;
 }
 
 struct MyRubik {
@@ -496,9 +482,82 @@ struct MyRubik {
     }
 };
 
-struct MyApp : public sb6::application
+struct MyApp
 {
+
+    static void errorCallback(int error, const char *desc)
+    {
+        puts(desc);
+    }
   public:
+    MyApp() = default;
+    MyApp(MyApp&) = delete;
+
+    GLFWwindow *window = nullptr;
+    void run()
+    {
+        bool running = true;
+
+        if (!glfwInit()) {
+            fprintf(stderr, "Failed to initialize GLFW\n");
+            return;
+        }
+        glfwSetErrorCallback(errorCallback);
+
+
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+
+#ifdef _DEBUG
+        glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
+#endif
+
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+        glfwWindowHint(GLFW_SAMPLES, 4);
+
+        window = glfwCreateWindow(800, 600, "CubeSolver",
+                                  NULL, nullptr);
+        if (!window) {
+            puts("window creation failed");
+            return;
+        }
+
+        glfwMakeContextCurrent(window);
+        glfwSetWindowSizeCallback(window, glfw_onResize);
+        glfwSetKeyCallback(window, glfw_onKey);
+
+        glfwGetFramebufferSize(window, &windowWidth, &windowHeight);
+
+        startup();
+
+        do
+        {
+            render(glfwGetTime());
+
+            glfwPollEvents();
+            glfwSwapBuffers(window);
+
+            running &= (glfwGetKey(window, GLFW_KEY_ESCAPE ) == GLFW_RELEASE);
+            running &= !glfwWindowShouldClose(window);
+        } while(running);
+
+        shutdown();
+
+        glfwTerminate();
+    }
+    static MyApp *app;
+    static void glfw_onResize(GLFWwindow *window, int w, int h)
+    {
+        app->onResize(w, h);
+    }
+
+    static void glfw_onKey(GLFWwindow *window, int key, int scancode,
+                           int action, int mods)
+    {
+        app->onKey(key, action);
+    }
+
     string getShaderLog(GLuint shader)
     {
         string str(" ", 4096);
@@ -520,7 +579,7 @@ struct MyApp : public sb6::application
     {
         GLuint shader = glCreateShader(shaderType);
         if (shader == 0) {
-            puts("glCreateShader failed");
+            printf("glCreateShader failed: %d\n", int(glGetError()));
             return 0;
         }
         string src = getFileAsString(filename);
@@ -620,11 +679,13 @@ struct MyApp : public sb6::application
 
         glGetProgramiv(shadowProgram, GL_LINK_STATUS, &status);
         if (status != GL_TRUE) {
-            printf("link program failed: %s\n", getProgramLog(shadowProgram).c_str());
+            printf("link program failed: %s\n",
+                   getProgramLog(shadowProgram).c_str());
             return false;
         }
 
-        vertexShader = compileShader("vertex_passthrough.glsl", GL_VERTEX_SHADER);
+        vertexShader = compileShader("vertex_passthrough.glsl",
+                                     GL_VERTEX_SHADER);
         fragmentShader = compileShader("fragment_texture.glsl",
                                        GL_FRAGMENT_SHADER);
 
@@ -640,7 +701,8 @@ struct MyApp : public sb6::application
 
         glGetProgramiv(debugProgram, GL_LINK_STATUS, &status);
         if (status != GL_TRUE) {
-            printf("link program failed: %s\n", getProgramLog(debugProgram).c_str());
+            printf("link program failed: %s\n",
+                   getProgramLog(debugProgram).c_str());
             return false;
         }
         debugTexIDLoc = getUniform(debugProgram, "text");
@@ -657,19 +719,6 @@ struct MyApp : public sb6::application
 
     MyRubik rubik;
 
-    void init()
-    {
-        sb6::application::init();
-        setVsync(false);
-        info.samples = 4;
-        strcpy(info.title, "CubeSolver");
-    }
-
-    // GLuint groundVao;
-    GLuint groundVecBuf;
-    GLuint groundColorBuf;
-    GLuint groundNormalBuf;
-
     MyPoint groundVec[6];
     MyPoint groundColor[6];
     MyPoint groundNormal[6];
@@ -685,15 +734,21 @@ struct MyApp : public sb6::application
 
         glCall(glGenTextures(1, &depthTexture));
         glCall(glBindTexture(GL_TEXTURE_2D, depthTexture));
-        glCall(glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, SHADOWMAP_SIZE, SHADOWMAP_SIZE, 0,
-                     GL_DEPTH_COMPONENT, GL_FLOAT, 0));
-        glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
-        glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
-        glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-        glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-        glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL));
+        glCall(glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16,
+                            SHADOWMAP_SIZE, SHADOWMAP_SIZE, 0,
+                            GL_DEPTH_COMPONENT, GL_FLOAT, 0));
+        glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+                               GL_LINEAR));
+        glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                               GL_LINEAR));
+        glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
+                               GL_CLAMP_TO_EDGE));
+        glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
+                               GL_CLAMP_TO_EDGE));
+        glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC,
+                               GL_LEQUAL));
         glCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE,
-                        GL_COMPARE_REF_TO_TEXTURE));
+                               GL_COMPARE_REF_TO_TEXTURE));
 
         glCall(glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
                                     depthTexture, 0));
@@ -708,11 +763,9 @@ struct MyApp : public sb6::application
             printf("yo %d\n", int(ret));
             exit(1);
         }
-
-        // glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
-	GLuint quad_vertexbuffer;
+    GLuint quad_vertexbuffer;
     void startup()
     {
         if (!compileShaders())
@@ -722,7 +775,6 @@ struct MyApp : public sb6::application
         glBindVertexArray(vao);
 
         rubik.set();
-
 
         glGenBuffers(1, &buffer);
         glBindBuffer(GL_ARRAY_BUFFER, buffer);
@@ -810,7 +862,11 @@ struct MyApp : public sb6::application
         glDepthFunc(GL_LESS);
         glEnable(GL_MULTISAMPLE);
 
-        glUniformMatrix4fv(projMatrixLocation, 1, GL_FALSE, projMatrix);
+        const float aspect = (float) windowWidth / (float)windowHeight;
+        projMatrix = perspective(50.0f, aspect, 0.1f, 1000.0f);
+
+        glUniformMatrix4fv(projMatrixLocation, 1, GL_FALSE,
+                           projMatrix.buf);
         glUniformMatrix4fv(vertexTransformLocation, 28, GL_FALSE,
                            (const GLfloat *) rubik.transforms);
         glUseProgram(shadowProgram);
@@ -820,17 +876,18 @@ struct MyApp : public sb6::application
 
         // The quad's FBO. Used only for visualizing the shadowmap.
         static const GLfloat g_quad_vertex_buffer_data[] = {
-		-1.0f, -1.0f, 0.0f,
-		 1.0f, -1.0f, 0.0f,
-		-1.0f,  1.0f, 0.0f,
-		-1.0f,  1.0f, 0.0f,
-		 1.0f, -1.0f, 0.0f,
-		 1.0f,  1.0f, 0.0f,
+        -1.0f, -1.0f, 0.0f,
+         1.0f, -1.0f, 0.0f,
+        -1.0f,  1.0f, 0.0f,
+        -1.0f,  1.0f, 0.0f,
+         1.0f, -1.0f, 0.0f,
+         1.0f,  1.0f, 0.0f,
         };
 
-	glGenBuffers(1, &quad_vertexbuffer);
-	glBindBuffer(GL_ARRAY_BUFFER, quad_vertexbuffer);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(g_quad_vertex_buffer_data), g_quad_vertex_buffer_data, GL_STATIC_DRAW);
+        glGenBuffers(1, &quad_vertexbuffer);
+        glBindBuffer(GL_ARRAY_BUFFER, quad_vertexbuffer);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(g_quad_vertex_buffer_data),
+                     g_quad_vertex_buffer_data, GL_STATIC_DRAW);
 
         initFrameBuf();
         //glEnable(GL_CULL_FACE);
@@ -843,14 +900,47 @@ struct MyApp : public sb6::application
         glDeleteProgram(program);
     }
 
-    vmath::mat4     projMatrix;
+    MyMatrix projMatrix;
+    static MyMatrix perspective(float fovy, float aspect, float n, float f)
+    {
+        float q = 1.0f / tan((0.5f * fovy) * (M_PI/180.0));
+        float A = q / aspect;
+        float B = (n + f) / (n - f);
+        float C = (2.0f * n * f) / (n - f);
+
+        MyMatrix result;
+        result.set(0, 0, A);
+        result.set(1, 1, q);
+        result.set(2, 2, B);
+        result.set(2, 3, C);
+        result.set(3, 2, -1.0f);
+
+        return result;
+    }
+
+    static MyMatrix ortho(float left, float right, float bottom, float top,
+                          float n, float f)
+    {
+        MyMatrix result;
+        result.set(0, 0, 2.0f / (right - left));
+        result.set(1, 1, 2.0f / (top - bottom));
+        result.set(2, 2, 2.0f / (n - f));
+        result.set(0, 3, (left + right) / (left - right));
+        result.set(1, 3, (bottom + top) / (bottom - top));
+        result.set(2, 3, (n + f) / (f - n));
+        return result;
+    }
+    int windowWidth = 0;
+    int windowHeight = 0;
     void onResize(int w, int h)
     {
-        sb6::application::onResize(w, h);
-        float aspect = (float) info.windowWidth / (float)info.windowHeight;
-        projMatrix = vmath::perspective(50.0f, aspect, 0.1f, 1000.0f);
+        printf("resize %d %d\n", w, h);
+        glfwGetFramebufferSize(window, &windowWidth, &windowHeight);
+        float aspect = (float) windowWidth / (float)windowHeight;
+        projMatrix = perspective(50.0f, aspect, 0.1f, 1000.0f);
         if (projMatrixLocation != -1) {
-            glUniformMatrix4fv(projMatrixLocation, 1, GL_FALSE, projMatrix);
+            glUniformMatrix4fv(projMatrixLocation, 1, GL_FALSE,
+                               projMatrix.buf);
         }
     }
 
@@ -932,8 +1022,8 @@ struct MyApp : public sb6::application
     void onKey(int key, int action)
     {
         static bool shiftOn = false;
-        if (key == GLFW_KEY_LSHIFT
-         || key == GLFW_KEY_RSHIFT) {
+        if (key == GLFW_KEY_LEFT_SHIFT
+         || key == GLFW_KEY_RIGHT_SHIFT) {
             shiftOn = (action == GLFW_PRESS);
         }
 
@@ -1004,7 +1094,6 @@ struct MyApp : public sb6::application
     double start;
     void render(double currentTime)
     {
-        MyMatrix mv;
         if (frames == 0) {
             start = currentTime;
         }
@@ -1065,6 +1154,7 @@ struct MyApp : public sb6::application
             }
             rotLastFrame = currentTime;
         }
+        MyMatrix cubeRot;
         if (inViewRot) {
             double totalDiff = currentTime - rotStartTime;
             double diff = currentTime - rotLastFrame;
@@ -1078,7 +1168,7 @@ struct MyApp : public sb6::application
             MyMatrix rx,ry;
             rx.rotateX((xRot * diff + oldxRot*(1.0f - diff)) / 180.0f * PI);
             ry.rotateY((yRot * diff + oldyRot*(1.0f - diff)) / 180.0f * PI);
-            mv = rx * ry;
+            cubeRot = rx * ry;
             if (totalDiff >= totRotTime2) {
                 inViewRot = false;
                 if (queueRotType[0].rotType != -1) {
@@ -1098,14 +1188,15 @@ struct MyApp : public sb6::application
             MyMatrix rx,ry;
             rx.rotateX(xRot / 180.0f * PI);
             ry.rotateY(yRot / 180.0f * PI);
-            mv = rx * ry;
+            cubeRot = rx * ry;
         }
-        MyMatrix gmv;
 
-        gmv.set(2, 3, -5.0f);
-        mv.set(2, 3, -5.0f);
-#if 1
+        MyMatrix groundMv;
+        groundMv.set(2, 3, -5.0f);
 
+        MyMatrix cubeMv = cubeRot;
+        cubeMv.set(2, 3, -5.0f);
+        // Render shadow into shadow map
         glBindFramebuffer(GL_FRAMEBUFFER, frameBuf);
         glViewport(0,0,SHADOWMAP_SIZE,SHADOWMAP_SIZE);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1114,66 +1205,51 @@ struct MyApp : public sb6::application
         glUseProgram(shadowProgram);
         glEnable(GL_CULL_FACE);
         glCullFace(GL_BACK);
-#if 0
-        MyPoint lightPos(2.0f,4.0f, -4.0f);
-        MyPoint lightInvDir = MyPoint(1.0f,2.5,0.4);
-        MyMatrix l = lookAt(lightPos, lightPos - lightInvDir, MyPoint(0,1,0));
-        vmath::mat4 p = vmath::perspective(50.0f, 1.0f, 0.1f, 50.0f);
-#else
-        //MyPoint lightInvDir(1.0f,2.5,1.0);
+
         MyPoint lightInvDir(1.0f,3.0f,1.0f);
-        //MyMatrix p = MyMatrix(vmath::ortho(-30, 30, -30, 30, -30, 30));
-        //MyMatrix p = MyMatrix(vmath::ortho(-30, 30, -30, 30, -30, 30));
-        MyMatrix p = MyMatrix(vmath::ortho(-5, 5, -5, 5, -10, 0));
-        //MyMatrix p = MyMatrix(vmath::ortho(-10, 10, -10, 10, 1.0, 10));
-        //vmath::mat4 p = vmath::ortho(-5, 5, -5, 5, -5, 5);
-        //vmath::mat4 p = vmath::ortho(0.5f, 4, 0, 3, -5, 1);
+        MyMatrix p = ortho(-5, 5, -5, 5, -10, 0);
         MyMatrix l = lookAt(lightInvDir, MyPoint(), MyPoint(0,1,0));
-#endif
 
         glUniformMatrix4fv(shadowPerspectiveLoc, 1, GL_FALSE, p.buf);
-        MyMatrix yo = l * mv;
-        glCall(glUniformMatrix4fv(shadowMvLoc, 1, GL_FALSE, yo.buf));
+        MyMatrix tmp = l * cubeMv;
+        glCall(glUniformMatrix4fv(shadowMvLoc, 1, GL_FALSE, tmp.buf));
         glDrawArrays(GL_TRIANGLES, 0, 36*27);
 
-        //yo = l * gmv;
-        //glCall(glUniformMatrix4fv(shadowMvLoc, 1, GL_FALSE, yo.buf));
-        //glDrawArrays(GL_TRIANGLES, 36*27, 6);
-
-        // Switch back
+        // Switch back the program
         glUseProgram(program);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0,0,info.windowWidth,info.windowHeight);
+        glViewport(0,0, windowWidth, windowHeight);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glEnable(GL_CULL_FACE);
         glCullFace(GL_BACK);
 
+        // Bind shadowmap texture
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, depthTexture);
         glUniform1i(shadowMapID, 0);
-#else
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-#endif
+
         constexpr GLfloat background[] = { 210.0f/255.0f, 230.0f/255.0f, 255.0f/255.0f, 1.0f };
         glClearBufferfv(GL_COLOR, 0, background);
 
-        //p.reset();
+        // Render the ground with shadow
         glUniform1i(passThroughShader, 1);
-        glUniformMatrix4fv(mvMatrixLocation, 1, GL_FALSE, gmv.buf);
-        yo = l * gmv;
-        yo = p * yo;
-        glCall(glUniformMatrix4fv(shadowMvpLoc, 1, GL_FALSE, yo.buf));
+        glUniformMatrix4fv(mvMatrixLocation, 1, GL_FALSE, groundMv.buf);
+        tmp = l * groundMv;
+        tmp = p * tmp;
+        glCall(glUniformMatrix4fv(shadowMvpLoc, 1, GL_FALSE, tmp.buf));
         glDrawArrays(GL_TRIANGLES, 36*27, 6);
 
+        // Render the cube with shadow
         glUniform1i(passThroughShader, 0);
-        yo = l * mv;
-        yo = p * yo;
-        glUniformMatrix4fv(shadowMvpLoc, 1, GL_FALSE, yo.buf);
-        glUniformMatrix4fv(mvMatrixLocation, 1, GL_FALSE, mv.buf);
+        tmp = l * cubeMv;
+        tmp = p * tmp;
+        glUniformMatrix4fv(shadowMvpLoc, 1, GL_FALSE, tmp.buf);
+        glUniformMatrix4fv(mvMatrixLocation, 1, GL_FALSE, cubeMv.buf);
 
         glDrawArrays(GL_TRIANGLES, 0, 36*27);
 
+        // To debug the shadow
 #if 0
         glUseProgram(debugProgram);
         glDisableVertexAttribArray(0);
@@ -1213,6 +1289,13 @@ struct MyApp : public sb6::application
     }
 };
 
+int main(void) {
+    MyApp app;
+    MyApp::app = &app;
+    app.run();
+}
+
+MyApp *MyApp::app;
 constexpr MyPoint MyRubik::red;
 constexpr MyPoint MyRubik::green;
 constexpr MyPoint MyRubik::blue;
@@ -1222,4 +1305,3 @@ constexpr MyPoint MyRubik::white;
 constexpr MyPoint MyRubik::inside;
 constexpr int MyRubik::srcIndices[6][9];
 constexpr int MyRubik::dstIndices[6][9];
-DECLARE_MAIN(MyApp);
