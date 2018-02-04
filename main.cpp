@@ -1148,6 +1148,7 @@ struct MyApp
     int frames = 0;
     double start;
     MyMatrix cameraTransform;
+    double prevFps = 1.0;
     void render(double currentTime)
     {
         if (frames == 0) {
@@ -1342,7 +1343,12 @@ struct MyApp
 
         if (frames == 100) {
             frames = 0;
-            // printf("fps %f\n", 100.0 / (currentTime - start));
+            double fps = 100.0 / (currentTime - start);
+            double diff = fps / prevFps;
+            if (diff > 1.1 || diff < 0.9) {
+                printf("fps %.2lf\n", fps);
+            }
+            prevFps = fps;
         }
     }
 };
