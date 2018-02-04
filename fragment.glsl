@@ -10,7 +10,6 @@ out vec4 color;
 
 uniform sampler2DShadow shadowMap;
 
-//const vec3 lightPos = vec3(2.0,1.0,-5.0);
 const vec3 diffuseColor = vec3(0.3, 0.3, 0.3);
 const vec3 specColor = vec3(1.0, 1.0, 1.0);
 const float shininess = 30.0;
@@ -46,7 +45,9 @@ void main(void)
         int index = i;
         // being fully in the shadow will eat up 4*0.2 = 0.8
         // 0.2 potentially remain, which is quite dark.
-        visibility -= 0.2*(1.0-texture( shadowMap, vec3(shadowCoord.xy + poissonDisk[index]/700.0,  (shadowCoord.z-bias)/shadowCoord.w) ));
+        vec3 coord = vec3(shadowCoord.xy + poissonDisk[index]/700.0,
+                          (shadowCoord.z-bias)/shadowCoord.w);
+        visibility -= 0.2*(1.0-texture(shadowMap, coord));
     }
     if (passThroughShader == 0) {
         vec3 n = normalize(outNormal);

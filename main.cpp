@@ -1052,8 +1052,8 @@ struct MyApp
     void onMouseMove(double x, double y)
     {
 
-        const float diffX = (x - curX) / 50.0f;
-        const float diffY = (y - curY) / 50.0f;
+        const float diffX = (x - curX) / 100.0f;
+        const float diffY = (y - curY) / 100.0f;
 
         eyeDir.x += diffX;
         eyeDir.y -= diffY;
