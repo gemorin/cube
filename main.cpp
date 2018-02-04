@@ -146,6 +146,11 @@ struct __attribute__((packed)) MyPoint {
 
         return *this;
     }
+
+    MyPoint opposite() const {
+        return MyPoint(-x, -y, -z);
+    }
+
     void print() const {
         printf("%.3f %.3f %.3f\n", x, y, z);
     }
@@ -530,8 +535,8 @@ struct MyApp
         {
             render(glfwGetTime());
 
-            glfwPollEvents();
             glfwSwapBuffers(window);
+            glfwPollEvents();
 
             running &= (glfwGetKey(window, GLFW_KEY_ESCAPE ) == GLFW_RELEASE);
             running &= !glfwWindowShouldClose(window);
@@ -1042,6 +1047,7 @@ struct MyApp
         eye.z = 5.0f;
 
         eyeDir = MyPoint();
+        inCameraMove = false;
 
         updateCamera();
     }
@@ -1063,6 +1069,14 @@ struct MyApp
         curY = y;
     }
 
+    bool inCameraMove = false;
+    bool isXCameraMove = false;
+    float cameraAdjust = 0.0f;
+    int maxCameraMoveIncr = 0;
+    int numCameraMoveIncr = 0;
+    bool cameraKeyStillPressed = false;
+
+    int currentCameraMoveKey;
     void onKey(int key, int action)
     {
         static bool shiftOn = false;
@@ -1093,25 +1107,47 @@ struct MyApp
             processMoveKey(key);
             return;
         }
-        if (action != GLFW_PRESS) {
-            return;
-        }
+
 
         if (key == GLFW_KEY_S
          || key == GLFW_KEY_X
          || key == GLFW_KEY_Z
          || key == GLFW_KEY_C) {
-            constexpr float adjust = 0.1f;
-            switch (key) {
-              case GLFW_KEY_C: eye.x += adjust; eyeDir.x += adjust; break;
-              case GLFW_KEY_Z: eye.x -= adjust; eyeDir.x -= adjust; break;
-              case GLFW_KEY_X: eye.y -= adjust; eyeDir.y -= adjust; break;
-              case GLFW_KEY_S: eye.y += adjust; eyeDir.y += adjust; break;
+            if (inCameraMove) {
+                // If we're already moving, we're just updating if the
+                // current key is still pressed or not
+                if (key == currentCameraMoveKey) {
+                    cameraKeyStillPressed = (action != GLFW_RELEASE);
+                }
+                return;
             }
-            updateCamera();
+
+            if (action == GLFW_RELEASE) {
+                return;
+            }
+
+            float adjust = 0.1f / 10.0f;
+            maxCameraMoveIncr = 10;
+            switch (key) {
+              case GLFW_KEY_C: isXCameraMove = true;
+                               cameraAdjust = adjust; break;
+              case GLFW_KEY_Z: isXCameraMove = true;
+                               cameraAdjust = -adjust; break;
+              case GLFW_KEY_X: isXCameraMove = false;
+                               cameraAdjust = -adjust; break;
+              case GLFW_KEY_S: isXCameraMove = false;
+                               cameraAdjust = adjust; break;
+            }
+            numCameraMoveIncr = 0;
+            inCameraMove = true;
+            cameraKeyStillPressed = true;
+            currentCameraMoveKey = key;
             return;
         }
 
+        if (action != GLFW_PRESS) {
+            return;
+        }
 
         MyPoint direction;
         switch (key) {
@@ -1248,6 +1284,26 @@ struct MyApp
             cubeRot = rx * ry;
         }
 
+        if (inCameraMove) {
+            if (isXCameraMove) {
+                eye.x += cameraAdjust;
+                eyeDir.x += cameraAdjust;
+            }
+            else {
+                eye.y += cameraAdjust;
+                eyeDir.y += cameraAdjust;
+            }
+            ++numCameraMoveIncr;
+            if (numCameraMoveIncr == maxCameraMoveIncr) {
+                if (cameraKeyStillPressed) {
+                    numCameraMoveIncr = 0;
+                }
+                else {
+                    inCameraMove = false;
+                }
+            }
+            updateCamera();
+        }
 
         // Render shadow into shadow map
         glBindFramebuffer(GL_FRAMEBUFFER, frameBuf);
@@ -1259,9 +1315,12 @@ struct MyApp
         glEnable(GL_CULL_FACE);
         glCullFace(GL_BACK);
 
+        /// XXX fix THIS
+        MyPoint lightPos(2.0f, 1.0f, 0.0f);
         MyPoint lightInvDir(1.0f,3.0f,1.0f);
         MyMatrix p = ortho(-5, 5, -5, 5, -10, 0);
         MyMatrix l = lookAt(lightInvDir, MyPoint(), MyPoint(0,1,0));
+        //MyMatrix l = lookAt(lightPos, MyPoint(), MyPoint(0,1,0));
 
         glUniformMatrix4fv(shadowPerspectiveLoc, 1, GL_FALSE, p.buf);
         MyMatrix tmp = l * cubeRot;
@@ -1302,7 +1361,6 @@ struct MyApp
         tmp = p * tmp;
         glUniformMatrix4fv(shadowMvpLoc, 1, GL_FALSE, tmp.buf);
         glUniformMatrix4fv(mvMatrixLocation, 1, GL_FALSE, cubeMv.buf);
-        MyPoint lightPos(2.0f, 1.0f, 0.0f);
         lightPos = lightPos.transform(fullMv);
         glUniform3f(lightPosLoc, lightPos.x, lightPos.y, lightPos.z);
 
