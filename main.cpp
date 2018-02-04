@@ -72,24 +72,27 @@ struct __attribute__((packed)) MyMatrix {
         MyMatrix n;
         memcpy(buf,n.buf, sizeof(buf));
     }
-    void rotateX(const double angleInRad) {
+    MyMatrix& rotateX(const double angleInRad) {
         set(1, 1, cosf(angleInRad));
         set(1, 2, -sinf(angleInRad));
         set(2, 2, get(1, 1));
         set(2, 1, -get(1, 2));
+        return *this;
     }
 
-    void rotateZ(const double angleInRad) {
+    MyMatrix& rotateZ(const double angleInRad) {
         set(0, 0, cosf(angleInRad));
         set(0, 1, -sinf(angleInRad));
         set(1, 1, get(0, 0));
         set(1, 0, -get(0, 1));
+        return *this;
     }
-    void rotateY(const double angleInRad) {
+    MyMatrix& rotateY(const double angleInRad) {
         set(0, 0, cosf(angleInRad));
         set(0, 2, sinf(angleInRad));
         set(2, 0, -get(0, 2));
         set(2, 2, get(0, 0));
+        return *this;
     }
     MyMatrix operator*(const MyMatrix rhs) const {
         MyMatrix ret;
@@ -301,27 +304,31 @@ struct MyCube {
 
 MyMatrix lookAt(const MyPoint& eye, const MyPoint& center, const MyPoint& up)
 {
-    MyMatrix ret;
     MyPoint f = (center - eye);
     f.normalize();
+
     MyPoint upn(up);
     upn.normalize();
-    MyPoint s = f.cross(upn);
-    MyPoint u = s.cross(f);
-    MyMatrix result;
-    result.set(0, 0, s.x);
-    result.set(0, 1, s.y);
-    result.set(0, 2, s.z);
-    result.set(1, 0, u.x);
-    result.set(1, 1, u.y);
-    result.set(1, 2, u.z);
-    result.set(2, 0, -f.x);
-    result.set(2, 1, -f.y);
-    result.set(2, 2, -f.z);
-    result.set(0, 3, -eye.x);
-    result.set(1, 3, -eye.y);
-    result.set(2, 3, -eye.z);
-    return result;
+
+    const MyPoint s = f.cross(upn);
+    const MyPoint u = s.cross(f);
+
+    MyMatrix rot;
+    rot.set(0, 0, s.x);
+    rot.set(0, 1, s.y);
+    rot.set(0, 2, s.z);
+    rot.set(1, 0, u.x);
+    rot.set(1, 1, u.y);
+    rot.set(1, 2, u.z);
+    rot.set(2, 0, -f.x);
+    rot.set(2, 1, -f.y);
+    rot.set(2, 2, -f.z);
+
+    MyMatrix trans;
+    trans.set(0, 3, -eye.x);
+    trans.set(1, 3, -eye.y);
+    trans.set(2, 3, -eye.z);
+    return rot * trans;
 }
 
 struct MyRubik {
@@ -385,19 +392,6 @@ struct MyRubik {
         }
     }
 
-    void setVisibleFace(int cubeIdx, int face, MyPoint color, float r)
-    {
-        colors[cubeIdx].setFace(face, color);
-        //constexpr MyPoint adj(-0.01f,-0.01f,-0.01f);
-        //cubes[cubeIdx].addToFace(face, adj);
-    }
-    void setInvisibleFace(int cubeIdx, int face, MyPoint color, float r)
-    {
-        colors[cubeIdx].setFace(face, color);
-        //constexpr MyPoint adj(0.01f,0.01f,0.01f);
-        //cubes[cubeIdx].addToFace(face, adj);
-    }
-
     void set() {
         faceNormal[0].z = 1;
         faceNormal[1].x = 1;
@@ -406,7 +400,7 @@ struct MyRubik {
         faceNormal[4].y = -1;
         faceNormal[5].y = 1;
 
-        float r = 0.39f;//4f;
+        constexpr float cubeRadius = 0.39f;
 
         for (int i = 0; i < 27; ++i) {
             for (int j = 0; j < 36; ++j) {
@@ -414,58 +408,58 @@ struct MyRubik {
             }
         }
 
-        cubes[0].set(MyPoint(-0.4f, -0.4f, 0.4f), r);
-        setVisibleFace(0, MyCube::LEFT, blue, r);
-        setVisibleFace(0, MyCube::FRONT, red, r);
-        setVisibleFace(0, MyCube::BOTTOM, white, r);
+        cubes[0].set(MyPoint(-0.4f, -0.4f, 0.4f), cubeRadius);
+        colors[0].setFace(MyCube::LEFT, blue);
+        colors[0].setFace(MyCube::FRONT, red);
+        colors[0].setFace(MyCube::BOTTOM, white);
 
-        cubes[1].set(MyPoint(0.0f, -0.4f, 0.4f), r);
-        setVisibleFace(1, MyCube::FRONT, red, r);
-        setVisibleFace(1, MyCube::BOTTOM, white, r);
+        cubes[1].set(MyPoint(0.0f, -0.4f, 0.4f), cubeRadius);
+        colors[1].setFace(MyCube::FRONT, red);
+        colors[1].setFace(MyCube::BOTTOM, white);
 
-        cubes[2].set(MyPoint(0.4f, -0.4f, 0.4f), r);
-        setVisibleFace(2, MyCube::FRONT, red, r);
-        setVisibleFace(2, MyCube::BOTTOM, white, r);
-        setVisibleFace(2, MyCube::RIGHT, green, r);
+        cubes[2].set(MyPoint(0.4f, -0.4f, 0.4f), cubeRadius);
+        colors[2].setFace(MyCube::FRONT, red);
+        colors[2].setFace(MyCube::BOTTOM, white);
+        colors[2].setFace(MyCube::RIGHT, green);
 
-        cubes[3].set(MyPoint(-0.4f, 0.0f, 0.4f), r);
-        setVisibleFace(3, MyCube::LEFT, blue, r);
-        setVisibleFace(3, MyCube::FRONT, red, r);
+        cubes[3].set(MyPoint(-0.4f, 0.0f, 0.4f), cubeRadius);
+        colors[3].setFace(MyCube::LEFT, blue);
+        colors[3].setFace(MyCube::FRONT, red);
 
-        cubes[4].set(MyPoint(0.0f, 0.0f, 0.4f), r);
-        setVisibleFace(4, MyCube::FRONT, red, r);
+        cubes[4].set(MyPoint(0.0f, 0.0f, 0.4f), cubeRadius);
+        colors[4].setFace(MyCube::FRONT, red);
 
-        cubes[5].set(MyPoint(0.4f, 0.0f, 0.4f), r);
-        setVisibleFace(5, MyCube::FRONT, red, r);
-        setVisibleFace(5, MyCube::RIGHT, green, r);
+        cubes[5].set(MyPoint(0.4f, 0.0f, 0.4f), cubeRadius);
+        colors[5].setFace(MyCube::FRONT, red);
+        colors[5].setFace(MyCube::RIGHT, green);
 
-        cubes[6].set(MyPoint(-0.4f, 0.4f, 0.4f), r);
-        setVisibleFace(6, MyCube::LEFT, blue, r);
-        setVisibleFace(6, MyCube::FRONT, red, r);
-        setVisibleFace(6, MyCube::TOP, yellow, r);
+        cubes[6].set(MyPoint(-0.4f, 0.4f, 0.4f), cubeRadius);
+        colors[6].setFace(MyCube::LEFT, blue);
+        colors[6].setFace(MyCube::FRONT, red);
+        colors[6].setFace(MyCube::TOP, yellow);
 
-        cubes[7].set(MyPoint(0.0f, 0.4f, 0.4f), r);
-        setVisibleFace(7, MyCube::FRONT, red, r);
-        setVisibleFace(7, MyCube::TOP, yellow, r);
+        cubes[7].set(MyPoint(0.0f, 0.4f, 0.4f), cubeRadius);
+        colors[7].setFace(MyCube::FRONT, red);
+        colors[7].setFace(MyCube::TOP, yellow);
 
-        cubes[8].set(MyPoint(0.4f, 0.4f, 0.4f), r);
-        setVisibleFace(8, MyCube::FRONT, red, r);
-        setVisibleFace(8, MyCube::RIGHT, green, r);
-        setVisibleFace(8, MyCube::TOP, yellow, r);
+        cubes[8].set(MyPoint(0.4f, 0.4f, 0.4f), cubeRadius);
+        colors[8].setFace(MyCube::FRONT, red);
+        colors[8].setFace(MyCube::RIGHT, green);
+        colors[8].setFace(MyCube::TOP, yellow);
 
         for (int i = 0; i < 9; ++i) {
             cubes[i+9] = cubes[i];
             cubes[i+9].addZ(-0.4f);
             colors[i+9] = colors[i];
-            setInvisibleFace(i+9, MyCube::FRONT, inside, r);
+            colors[i+9].setFace(MyCube::FRONT, inside);
         }
 
         for (int i = 0; i < 9; ++i) {
             cubes[i+18] = cubes[i];
             cubes[i+18].addZ(-0.4f*2);
             colors[i+18] = colors[i];
-            setInvisibleFace(i+18, MyCube::FRONT, inside, r);
-            setVisibleFace(i+18, MyCube::BACK, orange, r);
+            colors[i+18].setFace(MyCube::FRONT, inside);
+            colors[i+18].setFace(MyCube::BACK, orange);
         }
 
         for (int i = 0; i < 27; ++i) {
@@ -484,11 +478,11 @@ struct MyRubik {
 
 struct MyApp
 {
-
     static void errorCallback(int error, const char *desc)
     {
         puts(desc);
     }
+
   public:
     MyApp() = default;
     MyApp(MyApp&) = delete;
@@ -526,6 +520,7 @@ struct MyApp
         glfwMakeContextCurrent(window);
         glfwSetWindowSizeCallback(window, glfw_onResize);
         glfwSetKeyCallback(window, glfw_onKey);
+        glfwSetCursorPosCallback(window, glfw_onMouseMove);
 
         glfwGetFramebufferSize(window, &windowWidth, &windowHeight);
 
@@ -556,6 +551,11 @@ struct MyApp
                            int action, int mods)
     {
         app->onKey(key, action);
+    }
+
+    static void glfw_onMouseMove(GLFWwindow *window, double x, double y)
+    {
+        app->onMouseMove(x, y);
     }
 
     string getShaderLog(GLuint shader)
@@ -614,6 +614,8 @@ struct MyApp
     GLuint shadowPerspectiveLoc;
     GLuint shadowVertexTransformLoc;
 
+    GLuint lightPosLoc;
+
     GLuint getUniform(GLuint program, const char *name)
     {
         GLint ret = glGetUniformLocation(program, name);
@@ -647,6 +649,7 @@ struct MyApp
         passThroughShader = getUniform(program, "passThroughShader");
         shadowMapID = getUniform(program, "shadowMap");
         shadowMvpLoc = getUniform(program, "shadowMvp");
+        lightPosLoc = getUniform(program, "lightPos");
 
         GLint status;
         glGetProgramiv(program, GL_LINK_STATUS, &status);
@@ -758,14 +761,14 @@ struct MyApp
 
         GLenum ret = glCheckFramebufferStatus(GL_FRAMEBUFFER);
         if (ret != GL_FRAMEBUFFER_COMPLETE) {
-            printf("yo %d\n", int(ret));
+            printf("glCheckFramebufferStatus returned %d\n", int(ret));
             ret = glGetError();
-            printf("yo %d\n", int(ret));
+            printf("GLError %d\n", int(ret));
             exit(1);
         }
     }
 
-    GLuint quad_vertexbuffer;
+    GLuint quadVertexBuffer;
     void startup()
     {
         if (!compileShaders())
@@ -865,17 +868,19 @@ struct MyApp
         const float aspect = (float) windowWidth / (float)windowHeight;
         projMatrix = perspective(50.0f, aspect, 0.1f, 1000.0f);
 
+
         glUniformMatrix4fv(projMatrixLocation, 1, GL_FALSE,
                            projMatrix.buf);
         glUniformMatrix4fv(vertexTransformLocation, 28, GL_FALSE,
                            (const GLfloat *) rubik.transforms);
+
         glUseProgram(shadowProgram);
         glUniformMatrix4fv(shadowVertexTransformLoc, 28, GL_FALSE,
                            (const GLfloat *) rubik.transforms);
         glUseProgram(program);
 
         // The quad's FBO. Used only for visualizing the shadowmap.
-        static const GLfloat g_quad_vertex_buffer_data[] = {
+        constexpr GLfloat quadVertexBufferData[] = {
         -1.0f, -1.0f, 0.0f,
          1.0f, -1.0f, 0.0f,
         -1.0f,  1.0f, 0.0f,
@@ -884,14 +889,15 @@ struct MyApp
          1.0f,  1.0f, 0.0f,
         };
 
-        glGenBuffers(1, &quad_vertexbuffer);
-        glBindBuffer(GL_ARRAY_BUFFER, quad_vertexbuffer);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(g_quad_vertex_buffer_data),
-                     g_quad_vertex_buffer_data, GL_STATIC_DRAW);
+        glGenBuffers(1, &quadVertexBuffer);
+        glBindBuffer(GL_ARRAY_BUFFER, quadVertexBuffer);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertexBufferData),
+                     quadVertexBufferData, GL_STATIC_DRAW);
 
         initFrameBuf();
-        //glEnable(GL_CULL_FACE);
-        //glCullFace(GL_BACK);
+
+        resetState();
+        glfwGetCursorPos(window, &curX, &curY);
     }
 
     void shutdown()
@@ -944,12 +950,10 @@ struct MyApp
         }
     }
 
-
-
     static constexpr int initxRot = 0;
     static constexpr int inityRot = 45;
-    int xRot = initxRot;
-    int yRot = inityRot;
+    int xRot;
+    int yRot;
     int oldxRot;
     int oldyRot;
 
@@ -985,13 +989,16 @@ struct MyApp
 
     void processMoveKey(int key)
     {
+        if (key == GLFW_KEY_SPACE) {
+            resetState();
+            return ;
+        }
+
         oldxRot = xRot;
         oldyRot = yRot;
         rotStartTime = glfwGetTime();
         rotLastFrame = rotStartTime;
-        if (key != GLFW_KEY_SPACE) {
-            inViewRot = true;
-        }
+        inViewRot = true;
 
         constexpr int inc = 15;
         switch (key) {
@@ -999,7 +1006,6 @@ struct MyApp
           case GLFW_KEY_DOWN: xRot += inc; break;
           case GLFW_KEY_LEFT: yRot -= inc; break;
           case GLFW_KEY_RIGHT: yRot += inc; break;
-          case GLFW_KEY_SPACE: yRot = inityRot; xRot = initxRot; break;
         }
         if (xRot > 360) {
             xRot -= 360;
@@ -1017,6 +1023,44 @@ struct MyApp
             yRot += 360;
             oldyRot += 360;
         }
+    }
+
+    void updateCamera()
+    {
+        cameraTransform = lookAt(eye, eyeDir, MyPoint(0, 1, 0));
+    }
+
+    MyPoint eye;
+    MyPoint eyeDir;
+    void resetState()
+    {
+        yRot = inityRot;
+        xRot = initxRot;
+
+        eye.x = 0.0f;
+        eye.y = 0.0f;
+        eye.z = 5.0f;
+
+        eyeDir = MyPoint();
+
+        updateCamera();
+    }
+
+    double curX, curY;
+    float cameraPitch = 0.0;
+    float cameraYaw = 0.0;
+    void onMouseMove(double x, double y)
+    {
+
+        const float diffX = (x - curX) / 50.0f;
+        const float diffY = (y - curY) / 50.0f;
+
+        eyeDir.x += diffX;
+        eyeDir.y -= diffY;
+        updateCamera();
+
+        curX = x;
+        curY = y;
     }
 
     void onKey(int key, int action)
@@ -1043,7 +1087,7 @@ struct MyApp
             if (key != GLFW_KEY_SPACE) {
                 keyPress = key;
             }
-            else if (action !=  GLFW_PRESS) {
+            else if (action != GLFW_PRESS) {
                 return;
             }
             processMoveKey(key);
@@ -1052,6 +1096,22 @@ struct MyApp
         if (action != GLFW_PRESS) {
             return;
         }
+
+        if (key == GLFW_KEY_S
+         || key == GLFW_KEY_X
+         || key == GLFW_KEY_Z
+         || key == GLFW_KEY_C) {
+            constexpr float adjust = 0.1f;
+            switch (key) {
+              case GLFW_KEY_C: eye.x += adjust; eyeDir.x += adjust; break;
+              case GLFW_KEY_Z: eye.x -= adjust; eyeDir.x -= adjust; break;
+              case GLFW_KEY_X: eye.y -= adjust; eyeDir.y -= adjust; break;
+              case GLFW_KEY_S: eye.y += adjust; eyeDir.y += adjust; break;
+            }
+            updateCamera();
+            return;
+        }
+
 
         MyPoint direction;
         switch (key) {
@@ -1064,15 +1124,10 @@ struct MyApp
           default: return;
         }
 
-        //MyMatrix rx,ry;
-        //rx.rotateX(-xRot / 180.0f * PI);
-        //ry.rotateY(-yRot / 180.0f * PI);
-        //MyMatrix mv = ry * rx;
-        MyMatrix rx,ry;
-        rx.rotateX(xRot / 180.0f * PI - 0.1f);
-        ry.rotateY(yRot / 180.0f * PI - 0.1f);
-        MyMatrix mv = rx * ry;
-        //mv = mv.tranpose();
+        MyMatrix mv;
+        mv.rotateX(xRot / 180.0f * PI - 0.1f);
+        mv = mv * MyMatrix().rotateY(yRot / 180.0f * PI - 0.1f);
+
         float max;
         RotType r;
         r.inverse = shiftOn;
@@ -1092,6 +1147,7 @@ struct MyApp
 
     int frames = 0;
     double start;
+    MyMatrix cameraTransform;
     void render(double currentTime)
     {
         if (frames == 0) {
@@ -1191,11 +1247,7 @@ struct MyApp
             cubeRot = rx * ry;
         }
 
-        MyMatrix groundMv;
-        groundMv.set(2, 3, -5.0f);
 
-        MyMatrix cubeMv = cubeRot;
-        cubeMv.set(2, 3, -5.0f);
         // Render shadow into shadow map
         glBindFramebuffer(GL_FRAMEBUFFER, frameBuf);
         glViewport(0,0,SHADOWMAP_SIZE,SHADOWMAP_SIZE);
@@ -1211,7 +1263,7 @@ struct MyApp
         MyMatrix l = lookAt(lightInvDir, MyPoint(), MyPoint(0,1,0));
 
         glUniformMatrix4fv(shadowPerspectiveLoc, 1, GL_FALSE, p.buf);
-        MyMatrix tmp = l * cubeMv;
+        MyMatrix tmp = l * cubeRot;
         glCall(glUniformMatrix4fv(shadowMvLoc, 1, GL_FALSE, tmp.buf));
         glDrawArrays(GL_TRIANGLES, 0, 36*27);
 
@@ -1229,23 +1281,29 @@ struct MyApp
         glBindTexture(GL_TEXTURE_2D, depthTexture);
         glUniform1i(shadowMapID, 0);
 
-        constexpr GLfloat background[] = { 210.0f/255.0f, 230.0f/255.0f, 255.0f/255.0f, 1.0f };
+        constexpr GLfloat background[] = { 210.0f/255.0f, 230.0f/255.0f,
+                                           255.0f/255.0f, 1.0f };
         glClearBufferfv(GL_COLOR, 0, background);
 
         // Render the ground with shadow
+        MyMatrix fullMv = cameraTransform;
         glUniform1i(passThroughShader, 1);
-        glUniformMatrix4fv(mvMatrixLocation, 1, GL_FALSE, groundMv.buf);
-        tmp = l * groundMv;
+        glUniformMatrix4fv(mvMatrixLocation, 1, GL_FALSE, fullMv.buf);
+        tmp = l;
         tmp = p * tmp;
         glCall(glUniformMatrix4fv(shadowMvpLoc, 1, GL_FALSE, tmp.buf));
         glDrawArrays(GL_TRIANGLES, 36*27, 6);
 
         // Render the cube with shadow
         glUniform1i(passThroughShader, 0);
-        tmp = l * cubeMv;
+        MyMatrix cubeMv = fullMv * cubeRot;
+        tmp = l * cubeRot;
         tmp = p * tmp;
         glUniformMatrix4fv(shadowMvpLoc, 1, GL_FALSE, tmp.buf);
         glUniformMatrix4fv(mvMatrixLocation, 1, GL_FALSE, cubeMv.buf);
+        MyPoint lightPos(2.0f, 1.0f, 0.0f);
+        lightPos = lightPos.transform(fullMv);
+        glUniform3f(lightPosLoc, lightPos.x, lightPos.y, lightPos.z);
 
         glDrawArrays(GL_TRIANGLES, 0, 36*27);
 
@@ -1262,7 +1320,7 @@ struct MyApp
         glUniform1i(debugTexIDLoc, 0);
 
         glEnableVertexAttribArray(0);
-        glBindBuffer(GL_ARRAY_BUFFER, quad_vertexbuffer);
+        glBindBuffer(GL_ARRAY_BUFFER, quadVertexBuffer);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 

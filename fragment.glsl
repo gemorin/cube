@@ -5,11 +5,12 @@ in vec3 vertPos;
 in vec3 outNormal;
 in vec4 shadowCoord;
 uniform int passThroughShader;
+uniform vec3 lightPos;
 out vec4 color;
 
 uniform sampler2DShadow shadowMap;
 
-const vec3 lightPos = vec3(2.0,1.0,-5.0);
+//const vec3 lightPos = vec3(2.0,1.0,-5.0);
 const vec3 diffuseColor = vec3(0.3, 0.3, 0.3);
 const vec3 specColor = vec3(1.0, 1.0, 1.0);
 const float shininess = 30.0;
