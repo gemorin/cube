@@ -189,6 +189,52 @@ struct __attribute__((packed)) MyPoint {
     }
 };
 
+struct MyQuaternion {
+    float w = 1.0;
+    float x = 0.0;
+    float y = 0.0;
+    float z = 0.0;
+
+    void setRotation(float angle, MyPoint axis) {
+        w = cosf(angle / 2);
+        float s = sinf(angle / 2);
+        axis.normalize();
+        x = axis.x * s;
+        y = axis.y * s;
+        z = axis.z * s;
+    }
+
+    float magnitude() const {
+        return sqrt(w*w + x*x + y*y + z*z);
+    }
+
+    void normalize() {
+        const float l = magnitude();
+        w /= l;
+        x /= l;
+        y /= l;
+        z /= l;
+    }
+
+    MyMatrix toMatrix() const {
+        MyQuaternion q = *this;
+        q.normalize();
+
+        MyMatrix ret;
+        ret.set(0, 0, 1.0f - 2.0f * y * y - 2.0f * z * z);
+        ret.set(0, 1, 2.0f * x * y - 2.0f * w * z);
+        ret.set(0, 2, 2.0f * x * z + 2.0f * w * y);
+        ret.set(1, 0, 2.0f * x * y + 2.0f * w * z);
+        ret.set(1, 1, 1.0f - 2.0f * x * x - 2.0f * z * z);
+        ret.set(1, 2, 2.0f * y * z - 2.0f * w * x);
+        ret.set(2, 0, 2.0f * x * z - 2.0f * w * y);
+        ret.set(2, 1, 2.0f * y * z + 2.0f * w * x);
+        ret.set(2, 2, 1.0f - 2.0f * x * x - 2.0f * y * y);
+
+        return ret;
+    }
+};
+
 struct MyCube {
     MyPoint vertices[36];
 
@@ -397,6 +443,8 @@ struct MyRubik {
         }
     }
 
+    constexpr float radius() const { return 0.40f; }
+
     void set() {
         faceNormal[0].z = 1;
         faceNormal[1].x = 1;
@@ -405,7 +453,8 @@ struct MyRubik {
         faceNormal[4].y = -1;
         faceNormal[5].y = 1;
 
-        constexpr float cubeRadius = 0.39f;
+        // Give some space between the cubes
+        const float indvRadius = radius() - 0.01f;
 
         for (int i = 0; i < 27; ++i) {
             for (int j = 0; j < 36; ++j) {
@@ -413,55 +462,55 @@ struct MyRubik {
             }
         }
 
-        cubes[0].set(MyPoint(-0.4f, -0.4f, 0.4f), cubeRadius);
+        cubes[0].set(MyPoint(-radius(), -radius(), radius()), indvRadius);
         colors[0].setFace(MyCube::LEFT, blue);
         colors[0].setFace(MyCube::FRONT, red);
         colors[0].setFace(MyCube::BOTTOM, white);
 
-        cubes[1].set(MyPoint(0.0f, -0.4f, 0.4f), cubeRadius);
+        cubes[1].set(MyPoint(0.0f, -radius(), radius()), indvRadius);
         colors[1].setFace(MyCube::FRONT, red);
         colors[1].setFace(MyCube::BOTTOM, white);
 
-        cubes[2].set(MyPoint(0.4f, -0.4f, 0.4f), cubeRadius);
+        cubes[2].set(MyPoint(radius(), -radius(), radius()), indvRadius);
         colors[2].setFace(MyCube::FRONT, red);
         colors[2].setFace(MyCube::BOTTOM, white);
         colors[2].setFace(MyCube::RIGHT, green);
 
-        cubes[3].set(MyPoint(-0.4f, 0.0f, 0.4f), cubeRadius);
+        cubes[3].set(MyPoint(-radius(), 0.0f, radius()), indvRadius);
         colors[3].setFace(MyCube::LEFT, blue);
         colors[3].setFace(MyCube::FRONT, red);
 
-        cubes[4].set(MyPoint(0.0f, 0.0f, 0.4f), cubeRadius);
+        cubes[4].set(MyPoint(0.0f, 0.0f, radius()), indvRadius);
         colors[4].setFace(MyCube::FRONT, red);
 
-        cubes[5].set(MyPoint(0.4f, 0.0f, 0.4f), cubeRadius);
+        cubes[5].set(MyPoint(radius(), 0.0f, radius()), indvRadius);
         colors[5].setFace(MyCube::FRONT, red);
         colors[5].setFace(MyCube::RIGHT, green);
 
-        cubes[6].set(MyPoint(-0.4f, 0.4f, 0.4f), cubeRadius);
+        cubes[6].set(MyPoint(-radius(), radius(), radius()), indvRadius);
         colors[6].setFace(MyCube::LEFT, blue);
         colors[6].setFace(MyCube::FRONT, red);
         colors[6].setFace(MyCube::TOP, yellow);
 
-        cubes[7].set(MyPoint(0.0f, 0.4f, 0.4f), cubeRadius);
+        cubes[7].set(MyPoint(0.0f, radius(), radius()), indvRadius);
         colors[7].setFace(MyCube::FRONT, red);
         colors[7].setFace(MyCube::TOP, yellow);
 
-        cubes[8].set(MyPoint(0.4f, 0.4f, 0.4f), cubeRadius);
+        cubes[8].set(MyPoint(radius(), radius(), radius()), indvRadius);
         colors[8].setFace(MyCube::FRONT, red);
         colors[8].setFace(MyCube::RIGHT, green);
         colors[8].setFace(MyCube::TOP, yellow);
 
         for (int i = 0; i < 9; ++i) {
             cubes[i+9] = cubes[i];
-            cubes[i+9].addZ(-0.4f);
+            cubes[i+9].addZ(-radius());
             colors[i+9] = colors[i];
             colors[i+9].setFace(MyCube::FRONT, inside);
         }
 
         for (int i = 0; i < 9; ++i) {
             cubes[i+18] = cubes[i];
-            cubes[i+18].addZ(-0.4f*2);
+            cubes[i+18].addZ(-radius()*2);
             colors[i+18] = colors[i];
             colors[i+18].setFace(MyCube::FRONT, inside);
             colors[i+18].setFace(MyCube::BACK, orange);
@@ -813,7 +862,8 @@ struct MyApp
         glEnableVertexAttribArray(2);
 
         constexpr float groundBase = 50.f;
-        constexpr float groundYBase = -1.0f;
+        // -(Half of the rubik cube diagonal plus some)
+        const float groundYBase = -sqrt(3.0f)*1.5f*rubik.radius()-0.2f;
         constexpr float groundYDisp = 0.0f;
 
         groundVec[0].x = -groundBase;
@@ -930,15 +980,15 @@ struct MyApp
     }
 
     static MyMatrix ortho(float left, float right, float bottom, float top,
-                          float n, float f)
+                          float near, float far)
     {
         MyMatrix result;
         result.set(0, 0, 2.0f / (right - left));
         result.set(1, 1, 2.0f / (top - bottom));
-        result.set(2, 2, 2.0f / (n - f));
+        result.set(2, 2, 2.0f / (near - far));
         result.set(0, 3, (left + right) / (left - right));
         result.set(1, 3, (bottom + top) / (bottom - top));
-        result.set(2, 3, (n + f) / (f - n));
+        result.set(2, 3, (near + far) / (near - far));
         return result;
     }
     int windowWidth = 0;
@@ -1315,12 +1365,22 @@ struct MyApp
         glEnable(GL_CULL_FACE);
         glCullFace(GL_BACK);
 
-        /// XXX fix THIS
+#if 1
+        // XXX
         MyPoint lightPos(2.0f, 1.0f, 0.0f);
         MyPoint lightInvDir(1.0f,3.0f,1.0f);
-        MyMatrix p = ortho(-5, 5, -5, 5, -10, 0);
         MyMatrix l = lookAt(lightInvDir, MyPoint(), MyPoint(0,1,0));
-        //MyMatrix l = lookAt(lightPos, MyPoint(), MyPoint(0,1,0));
+        MyMatrix p = ortho(-5, 5, -5, 5, 0.1, 10.0);
+#else
+        MyPoint lightInvDir(5.0f,5.0f,0.0f);
+        MyPoint lightPos = lightInvDir; //(2.0f, 2.0f, 0.0f);
+        MyMatrix l = lookAt(
+                       lightInvDir,
+                       //MyPoint(rubik.radius(),rubik.radius(),-rubik.radius()),
+                       MyPoint(),
+                       MyPoint(0,1,0));
+        MyMatrix p = ortho(-5, 5, -5, 5, 0.1, 100.0);
+#endif
 
         glUniformMatrix4fv(shadowPerspectiveLoc, 1, GL_FALSE, p.buf);
         MyMatrix tmp = l * cubeRot;

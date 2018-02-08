@@ -1,8 +1,7 @@
 CXX=g++
-SB6DIR=/Users/guillaume/git/sb6code
 GLFWDIR=/usr/local/Cellar/glfw/3.2.1
-INCS=-I$(GLFWDIR)/include/GLFW -I$(SB6DIR)/include
-CXXFLAGS=-Wall $(INCS) -std=c++11 -g -O2 -fno-strict-aliasing
+INCS=-I$(GLFWDIR)/include/GLFW
+CXXFLAGS=-Wall $(INCS) -std=c++11 -g -O2
 LDFLAGS=-L$(GLFWDIR)/lib -framework Cocoa -framework OpenGL -lglfw
 
 all: main
