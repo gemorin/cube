@@ -176,7 +176,7 @@ struct __attribute__((packed)) MyPoint {
     }
 
     float length() const {
-        return sqrt(x*x+y*y+z*z);
+        return sqrtf(x*x+y*y+z*z);
     }
 
     void normalize() {
@@ -195,6 +195,10 @@ struct MyQuaternion {
     float y = 0.0;
     float z = 0.0;
 
+    MyQuaternion() = default;
+    MyQuaternion(float _w, float _x, float _y, float _z)
+        : w(_w), x(_x), y(_y), z(_z) {}
+
     void setRotation(float angle, MyPoint axis) {
         w = cosf(angle / 2);
         float s = sinf(angle / 2);
@@ -203,9 +207,18 @@ struct MyQuaternion {
         y = axis.y * s;
         z = axis.z * s;
     }
+    void rotateX(float angle) {
+        setRotation(angle, MyPoint{1.0f, 0.0f, 0.0f});
+    }
+    void rotateY(float angle) {
+        setRotation(angle, MyPoint{0.0f, 1.0f, 0.0f});
+    }
+    void rotateZ(float angle) {
+        setRotation(angle, MyPoint{0.0f, 0.0f, 1.0f});
+    }
 
     float magnitude() const {
-        return sqrt(w*w + x*x + y*y + z*z);
+        return sqrtf(w*w + x*x + y*y + z*z);
     }
 
     void normalize() {
@@ -214,6 +227,28 @@ struct MyQuaternion {
         x /= l;
         y /= l;
         z /= l;
+    }
+    MyQuaternion operator*(float mult) const {
+        return MyQuaternion{w*mult, x*mult, y*mult, z*mult};
+    }
+    MyQuaternion& operator*=(float mult) {
+        w *= mult;
+        x *= mult;
+        y *= mult;
+        z *= mult;
+        return *this;
+    }
+    MyQuaternion operator-(const MyQuaternion& rhs) const
+    {
+        return MyQuaternion{w-rhs.w,x-rhs.x,y-rhs.y,z-rhs.z};
+    }
+    MyQuaternion operator+(const MyQuaternion& rhs) const
+    {
+        return MyQuaternion{w+rhs.w,x+rhs.x,y+rhs.y,z+rhs.z};
+    }
+
+    float dot(const MyQuaternion& rhs) const {
+        return w * rhs.w + x * rhs.x + y * rhs.y + z * rhs.z;
     }
 
     MyMatrix toMatrix() const {
@@ -232,6 +267,31 @@ struct MyQuaternion {
         ret.set(2, 2, 1.0f - 2.0f * x * x - 2.0f * y * y);
 
         return ret;
+    }
+
+    static MyQuaternion slerp(MyQuaternion start,
+                              MyQuaternion end,
+                              float t)
+    {
+        start.normalize();
+        end.normalize();
+
+        float dot = start.dot(end);
+        if (dot < 0) {
+            dot = fabs(dot);
+            end *= -1.0f;
+        }
+
+        if (dot > 0.95) {
+            MyQuaternion ret = start + (end - start) * t;
+            ret.normalize();
+            return ret;
+        }
+        const float finalAngle = acosf(dot);
+        const float angle = finalAngle * t;
+        const float fact0 = cosf(angle) - dot * sinf(angle) / sinf(finalAngle);
+        const float fact1 = sinf(angle) / sinf(finalAngle);
+        return start * fact0 + end * fact1;
     }
 };
 
@@ -863,7 +923,7 @@ struct MyApp
 
         constexpr float groundBase = 50.f;
         // -(Half of the rubik cube diagonal plus some)
-        const float groundYBase = -sqrt(3.0f)*1.5f*rubik.radius()-0.2f;
+        const float groundYBase = -sqrtf(3.0f)*1.5f*rubik.radius()-0.2f;
         constexpr float groundYDisp = 0.0f;
 
         groundVec[0].x = -groundBase;
@@ -1370,7 +1430,7 @@ struct MyApp
         MyPoint lightPos(2.0f, 1.0f, 0.0f);
         MyPoint lightInvDir(1.0f,3.0f,1.0f);
         MyMatrix l = lookAt(lightInvDir, MyPoint(), MyPoint(0,1,0));
-        MyMatrix p = ortho(-5, 5, -5, 5, 0.1, 10.0);
+        MyMatrix p = ortho(-5, 5, -5, 5, 0, 10.0);
 #else
         MyPoint lightInvDir(5.0f,5.0f,0.0f);
         MyPoint lightPos = lightInvDir; //(2.0f, 2.0f, 0.0f);
@@ -1427,7 +1487,7 @@ struct MyApp
         glDrawArrays(GL_TRIANGLES, 0, 36*27);
 
         // To debug the shadow
-#if 0
+#if 1
         glUseProgram(debugProgram);
         glDisableVertexAttribArray(0);
         glDisableVertexAttribArray(1);

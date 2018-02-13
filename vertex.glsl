@@ -22,19 +22,20 @@ const mat4 depthBias = mat4(
 
 void main(void)
 {
-    shadowCoord = (depthBias * shadowMvp * vec4(position, 1.0));
     // shadowCoord = shadowMvp * vec4(position, 1.0);
     vsColor = color;
     if (passThroughShader == 0) {
         mat4 trans = mvMatrix * vTransform[gl_VertexID/36];
+        shadowCoord = (depthBias * shadowMvp * vTransform[gl_VertexID/36]*vec4(position, 1.0));
         mat4 nTrans = inverse(trans);
         nTrans = transpose(nTrans);
         vec4 pos = trans * vec4(position, 1.0f);
         gl_Position = projMatrix * pos;
-        outNormal = (trans * vec4(normal, 0.0f)).xyz;
+        outNormal = (nTrans * vec4(normal, 0.0f)).xyz;
         vertPos = vec3(pos.xyz) / pos.w;
     }
     else {
+        shadowCoord = (depthBias * shadowMvp * vec4(position, 1.0));
         gl_Position = projMatrix * mvMatrix * vec4(position, 1.0f);
     }
 }
