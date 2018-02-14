@@ -282,13 +282,10 @@ struct MyQuaternion {
         return ret;
     }
 
-    static MyQuaternion slerp(MyQuaternion start,
+    static MyQuaternion slerp(const MyQuaternion& start,
                               MyQuaternion end,
                               float t)
     {
-        start.normalize();
-        end.normalize();
-
         float dot = start.dot(end);
         if (dot < 0) {
             dot = fabs(dot);
@@ -463,6 +460,7 @@ struct MyRubik {
     MyMatrix mTransforms[28];
     int pos[27];
     MyPoint faceNormal[6];
+    MyQuaternion faceRotationEnd[9];
 
     constexpr static MyPoint red{186.0f/255.0f, 12.0f/255.0f, 47.0f/255.0f};
     constexpr static MyPoint green{0.0f/255.0f, 154.0f/255.0f, 68.0f/255.0f};
@@ -508,15 +506,10 @@ struct MyRubik {
 
     void endRot(int type, bool inv = false)
     {
-        MyQuaternion endQuat = rotTypeToQuat(type);
-        if (inv) {
-            endQuat.toOppositeAxis();
-        }
         for (int i = 0; i < 9; ++i) {
-            MyQuaternion& q = qTransforms[pos[srcIndices[type][i]]];
-            q = endQuat * q;
-            q.normalize();
-            mTransforms[pos[srcIndices[type][i]]] = q.toMatrix();
+            qTransforms[pos[srcIndices[type][i]]] = faceRotationEnd[i];
+            mTransforms[pos[srcIndices[type][i]]] =
+                                                faceRotationEnd[i].toMatrix();
         }
         int numIterations = inv ? 3 : 1;
         for (int iterations = 0 ; iterations < numIterations; ++iterations) {
@@ -533,16 +526,25 @@ struct MyRubik {
 
     void doIncRot(int type, bool inv, float t)
     {
+        for (int i = 0; i < 9; ++i) {
+            const MyQuaternion& cur = qTransforms[pos[srcIndices[type][i]]];
+            mTransforms[pos[srcIndices[type][i]]] = MyQuaternion::slerp(
+                                                        cur,
+                                                        faceRotationEnd[i],
+                                                        t).toMatrix();
+        }
+    }
+
+    void startRot(int type, bool inv)
+    {
         MyQuaternion endQuat = rotTypeToQuat(type);
         if (inv) {
             endQuat.toOppositeAxis();
         }
         for (int i = 0; i < 9; ++i) {
-            const MyQuaternion& curQuat = qTransforms[pos[srcIndices[type][i]]];
-            mTransforms[pos[srcIndices[type][i]]]
-                        = MyQuaternion::slerp(curQuat,
-                                              endQuat * curQuat,
-                                              t).toMatrix();
+            const MyQuaternion& c = qTransforms[pos[srcIndices[type][i]]];
+            faceRotationEnd[i] = endQuat * c;
+            faceRotationEnd[i].normalize();
         }
     }
 
@@ -1115,20 +1117,20 @@ struct MyApp
     int oldxRot;
     int oldyRot;
 
-    bool inRot = false;
+    bool inFaceRot = false;
     bool inViewRot = false;
     double rotStartTime;
     double rotLastFrame;
-    struct RotType {
+    struct FaceRotationInfo {
         int rotType = -1;
         bool inverse = false;
     };
-    array<RotType, 4> queueRotType;
-    RotType curRot;
+    array<FaceRotationInfo, 4> queueRotType;
+    FaceRotationInfo faceRotation;
 
-    void startRot(RotType r)
+    void startRot(const FaceRotationInfo& r)
     {
-        if (inRot == true || inViewRot) {
+        if (inFaceRot == true || inViewRot) {
             for (int i = 0; i < 4; ++i) {
                 if (queueRotType[i].rotType == -1) {
                     queueRotType[i] = r;
@@ -1137,10 +1139,11 @@ struct MyApp
             }
             return;
         }
-        curRot = r;
-        inRot = true;
+        faceRotation = r;
+        inFaceRot = true;
         rotStartTime = glfwGetTime();
         rotLastFrame = rotStartTime;
+        rubik.startRot(r.rotType, r.inverse);
     }
 
     int keyPress = -1;
@@ -1243,7 +1246,7 @@ struct MyApp
          || GLFW_KEY_LEFT == key
          || GLFW_KEY_RIGHT == key
          || GLFW_KEY_SPACE == key) {
-            if (inRot) {
+            if (inFaceRot) {
                 return;
 
             }
@@ -1318,7 +1321,7 @@ struct MyApp
         mv = mv * MyMatrix().rotateY(yRot / 180.0f * PI - 0.1f);
 
         float max;
-        RotType r;
+        FaceRotationInfo r;
         r.inverse = shiftOn;
         for (int i = 0; i < 6; ++i) {
             const MyPoint face = rubik.faceNormal[i].transform(mv);
@@ -1345,13 +1348,14 @@ struct MyApp
         }
         ++frames;
 
-        if (inRot) {
+        if (inFaceRot) {
             float t = float(currentTime - rotStartTime) / float(totRotTime);
             if (t >= 1.0f) {
-                inRot = false;
-                rubik.endRot((int) curRot.rotType, curRot.inverse);
+                inFaceRot = false;
+                rubik.endRot((int) faceRotation.rotType,
+                             faceRotation.inverse);
                 if (queueRotType[0].rotType != -1) {
-                    RotType next = queueRotType[0];
+                    FaceRotationInfo next = queueRotType[0];
                     queueRotType[0] = queueRotType[1];
                     queueRotType[1] = queueRotType[2];
                     queueRotType[2] = queueRotType[3];
@@ -1360,7 +1364,7 @@ struct MyApp
                 }
             }
             else {
-                rubik.doIncRot(curRot.rotType, curRot.inverse, t);
+                rubik.doIncRot(faceRotation.rotType, faceRotation.inverse, t);
             }
             glUseProgram(program);
             glCall(glUniformMatrix4fv(vertexTransformLocation, 28, GL_FALSE,
@@ -1387,7 +1391,7 @@ struct MyApp
             if (totalDiff >= totRotTime2) {
                 inViewRot = false;
                 if (queueRotType[0].rotType != -1) {
-                    RotType next = queueRotType[0];
+                    FaceRotationInfo next = queueRotType[0];
                     queueRotType[0] = queueRotType[1];
                     queueRotType[1] = queueRotType[2];
                     queueRotType[2] = queueRotType[3];
@@ -1499,7 +1503,7 @@ struct MyApp
         glDrawArrays(GL_TRIANGLES, 0, 36*27);
 
         // To debug the shadow
-#if 1
+#if 0
         glUseProgram(debugProgram);
         glDisableVertexAttribArray(0);
         glDisableVertexAttribArray(1);
