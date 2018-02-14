@@ -220,6 +220,11 @@ struct MyQuaternion {
     float magnitude() const {
         return sqrtf(w*w + x*x + y*y + z*z);
     }
+    void toOppositeAxis() {
+        x = -x;
+        y = -y;
+        z = -z;
+    }
 
     void normalize() {
         const float l = magnitude();
@@ -245,6 +250,14 @@ struct MyQuaternion {
     MyQuaternion operator+(const MyQuaternion& rhs) const
     {
         return MyQuaternion{w+rhs.w,x+rhs.x,y+rhs.y,z+rhs.z};
+    }
+    MyQuaternion operator*(const MyQuaternion& rhs) const {
+        return MyQuaternion{
+            -x * rhs.x - y * rhs.y - z * rhs.z + w * rhs.w,
+            x * rhs.w + y * rhs.z - z * rhs.y + w * rhs.x,
+            -x * rhs.z + y * rhs.w + z * rhs.x + w * rhs.y,
+            x * rhs.y - y * rhs.x + z * rhs.w + w * rhs.z
+        };
     }
 
     float dot(const MyQuaternion& rhs) const {
@@ -446,7 +459,8 @@ struct MyRubik {
     MyCube cubes[27];
     MyCube colors[27];
     MyCube normals[27];
-    MyMatrix transforms[28];
+    MyQuaternion qTransforms[28];
+    MyMatrix mTransforms[28];
     int pos[27];
     MyPoint faceNormal[6];
 
@@ -479,27 +493,56 @@ struct MyRubik {
        ,{ 24, 15,  6, 25, 16,  7, 26, 17,  8 } // up
     };
 
+    MyQuaternion rotTypeToQuat(int type) {
+        MyQuaternion ret;
+        switch (type) {
+          case MyCube::TOP: ret.rotateY(-PI/2.0f); return ret;
+          case MyCube::BOTTOM: ret.rotateY(PI/2.0f); return ret;
+          case MyCube::FRONT: ret.rotateZ(-PI/2.0f); return ret;
+          case MyCube::BACK: ret.rotateZ(PI/2.0f); return ret;
+          case MyCube::RIGHT: ret.rotateX(-PI/2.0f); return ret;
+          case MyCube::LEFT: ret.rotateX(PI/2.0f); return ret;
+        }
+        return ret;
+    }
+
     void endRot(int type, bool inv = false)
     {
+        MyQuaternion endQuat = rotTypeToQuat(type);
         if (inv) {
-            // Inverse rotation is equivalent to 3 regular rots.
-            endRot(type);
-            endRot(type);
+            endQuat.toOppositeAxis();
         }
-        int tmpBuf[9];
         for (int i = 0; i < 9; ++i) {
-            tmpBuf[i] = pos[srcIndices[type][i]];
+            MyQuaternion& q = qTransforms[pos[srcIndices[type][i]]];
+            q = endQuat * q;
+            q.normalize();
+            mTransforms[pos[srcIndices[type][i]]] = q.toMatrix();
         }
+        int numIterations = inv ? 3 : 1;
+        for (int iterations = 0 ; iterations < numIterations; ++iterations) {
+            int tmpBuf[9];
+            for (int i = 0; i < 9; ++i) {
+                tmpBuf[i] = pos[srcIndices[type][i]];
+            }
 
-        for (int i = 0; i < 9; ++i) {
-            pos[dstIndices[type][i]] = tmpBuf[i];
+            for (int i = 0; i < 9; ++i) {
+                pos[dstIndices[type][i]] = tmpBuf[i];
+            }
         }
     }
 
-    void doIncRot(int type, const MyMatrix& m ) {
+    void doIncRot(int type, bool inv, float t)
+    {
+        MyQuaternion endQuat = rotTypeToQuat(type);
+        if (inv) {
+            endQuat.toOppositeAxis();
+        }
         for (int i = 0; i < 9; ++i) {
-            transforms[pos[srcIndices[type][i]]]
-                        = m * transforms[pos[srcIndices[type][i]]];
+            const MyQuaternion& curQuat = qTransforms[pos[srcIndices[type][i]]];
+            mTransforms[pos[srcIndices[type][i]]]
+                        = MyQuaternion::slerp(curQuat,
+                                              endQuat * curQuat,
+                                              t).toMatrix();
         }
     }
 
@@ -987,11 +1030,11 @@ struct MyApp
         glUniformMatrix4fv(projMatrixLocation, 1, GL_FALSE,
                            projMatrix.buf);
         glUniformMatrix4fv(vertexTransformLocation, 28, GL_FALSE,
-                           (const GLfloat *) rubik.transforms);
+                           (const GLfloat *) rubik.mTransforms);
 
         glUseProgram(shadowProgram);
         glUniformMatrix4fv(shadowVertexTransformLoc, 28, GL_FALSE,
-                           (const GLfloat *) rubik.transforms);
+                           (const GLfloat *) rubik.mTransforms);
         glUseProgram(program);
 
         // The quad's FBO. Used only for visualizing the shadowmap.
@@ -1303,48 +1346,9 @@ struct MyApp
         ++frames;
 
         if (inRot) {
-            double totalDiff = currentTime - rotStartTime;
-            double diff = currentTime - rotLastFrame;
-
-            if (totalDiff > totRotTime) {
-                diff -= (totalDiff - totRotTime);
-            }
-
-            diff /= totRotTime;
-
-            MyMatrix t;
-            float angle = PI/2.0f*float(diff);
-            if (curRot.inverse) {
-                angle *= -1.0f;
-            }
-            if (curRot.rotType == MyCube::TOP) {
-                t.rotateY(-angle);
-            }
-            else if (curRot.rotType == MyCube::BOTTOM) {
-                t.rotateY(angle);
-            }
-            else if (curRot.rotType == MyCube::FRONT) {
-                t.rotateZ(-angle);
-            }
-            else if (curRot.rotType == MyCube::BACK) {
-                t.rotateZ(angle);
-            }
-            else if (curRot.rotType == MyCube::RIGHT) {
-                t.rotateX(-angle);
-            }
-            else if (curRot.rotType == MyCube::LEFT) {
-                t.rotateX(angle);
-            }
-            rubik.doIncRot(curRot.rotType, t);
-            glUseProgram(program);
-            glCall(glUniformMatrix4fv(vertexTransformLocation, 28, GL_FALSE,
-                               (const GLfloat *) rubik.transforms));
-            glUseProgram(shadowProgram);
-            glCall(glUniformMatrix4fv(shadowVertexTransformLoc, 28, GL_FALSE,
-                               (const GLfloat *) rubik.transforms));
-            if (totalDiff >= totRotTime) {
+            float t = float(currentTime - rotStartTime) / float(totRotTime);
+            if (t >= 1.0f) {
                 inRot = false;
-                //puts("end rot");
                 rubik.endRot((int) curRot.rotType, curRot.inverse);
                 if (queueRotType[0].rotType != -1) {
                     RotType next = queueRotType[0];
@@ -1355,7 +1359,15 @@ struct MyApp
                     startRot(next);
                 }
             }
-            rotLastFrame = currentTime;
+            else {
+                rubik.doIncRot(curRot.rotType, curRot.inverse, t);
+            }
+            glUseProgram(program);
+            glCall(glUniformMatrix4fv(vertexTransformLocation, 28, GL_FALSE,
+                               (const GLfloat *) rubik.mTransforms));
+            glUseProgram(shadowProgram);
+            glCall(glUniformMatrix4fv(shadowVertexTransformLoc, 28, GL_FALSE,
+                               (const GLfloat *) rubik.mTransforms));
         }
         MyMatrix cubeRot;
         if (inViewRot) {
