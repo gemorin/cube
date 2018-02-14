@@ -43,8 +43,8 @@ void main(void)
     // Sample the shadow map 4 times
     for (int i=0;i<4;i++){
         int index = i;
-        // being fully in the shadow will eat up 4*0.2 = 0.8
-        // 0.2 potentially remain, which is quite dark.
+        // Being fully in the shadow will eat up 4*0.2 = 0.8 0.2 potentially
+        // remain, which is quite dark.
         vec3 coord = vec3(shadowCoord.xy + poissonDisk[index]/700.0,
                           (shadowCoord.z-bias)/shadowCoord.w);
         visibility -= 0.2*(1.0-texture(shadowMap, coord));

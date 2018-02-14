@@ -514,7 +514,7 @@ struct MyRubik {
         faceNormal[5].y = 1;
 
         // Give some space between the cubes
-        const float indvRadius = radius() - 0.01f;
+        const float indvRadius = radius() - 0.004f;
 
         for (int i = 0; i < 27; ++i) {
             for (int j = 0; j < 36; ++j) {
