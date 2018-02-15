@@ -7,7 +7,6 @@
 
 using namespace std;
 
-
 #define GLFW_NO_GLU 1
 #define GLFW_INCLUDE_GLCOREARB 1
 extern "C" {
@@ -1110,12 +1109,9 @@ struct MyApp
         }
     }
 
-    static constexpr int initxRot = 0;
-    static constexpr int inityRot = 45;
-    int xRot;
-    int yRot;
-    int oldxRot;
-    int oldyRot;
+    MyQuaternion cubeRotStart;
+    MyQuaternion cubeRotEnd;
+    MyQuaternion cubeRot;
 
     bool inFaceRot = false;
     bool inViewRot = false;
@@ -1155,35 +1151,22 @@ struct MyApp
             return ;
         }
 
-        oldxRot = xRot;
-        oldyRot = yRot;
         rotStartTime = glfwGetTime();
         rotLastFrame = rotStartTime;
         inViewRot = true;
 
-        constexpr int inc = 15;
+        MyQuaternion newRot;
+        constexpr float angle = (PI/12.0f); // 15deg
         switch (key) {
-          case GLFW_KEY_UP: xRot -= inc; break;
-          case GLFW_KEY_DOWN: xRot += inc; break;
-          case GLFW_KEY_LEFT: yRot -= inc; break;
-          case GLFW_KEY_RIGHT: yRot += inc; break;
+          case GLFW_KEY_UP: newRot.rotateX(-angle); break;
+          case GLFW_KEY_DOWN: newRot.rotateX(angle); break;
+          case GLFW_KEY_LEFT: newRot.rotateY(-angle); break;
+          case GLFW_KEY_RIGHT: newRot.rotateY(angle); break;
         }
-        if (xRot > 360) {
-            xRot -= 360;
-            oldxRot -= 360;
-        }
-        else if (xRot < 360) {
-            xRot += 360;
-            oldxRot += 360;
-        }
-        if (yRot > 360) {
-            yRot -= 360;
-            oldyRot -= 360;
-        }
-        else if (yRot < 360) {
-            yRot += 360;
-            oldyRot += 360;
-        }
+
+        cubeRotStart = cubeRot;
+        cubeRotEnd = newRot * cubeRot;
+        cubeRotEnd.normalize();
     }
 
     void updateCamera()
@@ -1195,8 +1178,7 @@ struct MyApp
     MyPoint eyeDir;
     void resetState()
     {
-        yRot = inityRot;
-        xRot = initxRot;
+        cubeRot.rotateY(PI / 4.0f);
 
         eye.x = 0.0f;
         eye.y = 0.0f;
@@ -1316,10 +1298,7 @@ struct MyApp
           default: return;
         }
 
-        MyMatrix mv;
-        mv.rotateX(xRot / 180.0f * PI - 0.1f);
-        mv = mv * MyMatrix().rotateY(yRot / 180.0f * PI - 0.1f);
-
+        MyMatrix mv = cubeRot.toMatrix();
         float max;
         FaceRotationInfo r;
         r.inverse = shiftOn;
@@ -1334,8 +1313,8 @@ struct MyApp
         startRot(r);
     }
 
-    static constexpr double totRotTime = 0.4;
-    static constexpr double totRotTime2 = 0.2;
+    static constexpr float totRotTime = 0.4f;
+    static constexpr float totRotTime2 = 0.2f;
 
     int frames = 0;
     double start;
@@ -1349,7 +1328,7 @@ struct MyApp
         ++frames;
 
         if (inFaceRot) {
-            float t = float(currentTime - rotStartTime) / float(totRotTime);
+            const float t = float(currentTime - rotStartTime) / totRotTime;
             if (t >= 1.0f) {
                 inFaceRot = false;
                 rubik.endRot((int) faceRotation.rotType,
@@ -1373,23 +1352,11 @@ struct MyApp
             glCall(glUniformMatrix4fv(shadowVertexTransformLoc, 28, GL_FALSE,
                                (const GLfloat *) rubik.mTransforms));
         }
-        MyMatrix cubeRot;
         if (inViewRot) {
-            double totalDiff = currentTime - rotStartTime;
-            double diff = currentTime - rotLastFrame;
-
-            if (totalDiff > totRotTime2) {
-                diff -= (totalDiff - totRotTime2);
-            }
-
-            diff /= totRotTime2;
-
-            MyMatrix rx,ry;
-            rx.rotateX((xRot * diff + oldxRot*(1.0f - diff)) / 180.0f * PI);
-            ry.rotateY((yRot * diff + oldyRot*(1.0f - diff)) / 180.0f * PI);
-            cubeRot = rx * ry;
-            if (totalDiff >= totRotTime2) {
+            const float t = float(currentTime - rotStartTime) / totRotTime2;
+            if (t >= 1.0f) {
                 inViewRot = false;
+                cubeRot = cubeRotEnd;
                 if (queueRotType[0].rotType != -1) {
                     FaceRotationInfo next = queueRotType[0];
                     queueRotType[0] = queueRotType[1];
@@ -1402,13 +1369,11 @@ struct MyApp
                     processMoveKey(keyPress);
                 }
             }
+            else {
+                cubeRot = MyQuaternion::slerp(cubeRotStart, cubeRotEnd, t);
+            }
         }
-        else {
-            MyMatrix rx,ry;
-            rx.rotateX(xRot / 180.0f * PI);
-            ry.rotateY(yRot / 180.0f * PI);
-            cubeRot = rx * ry;
-        }
+        MyMatrix mCubeRot = cubeRot.toMatrix();
 
         if (inCameraMove) {
             if (isXCameraMove) {
@@ -1459,7 +1424,7 @@ struct MyApp
 #endif
 
         glUniformMatrix4fv(shadowPerspectiveLoc, 1, GL_FALSE, p.buf);
-        MyMatrix tmp = l * cubeRot;
+        MyMatrix tmp = l * mCubeRot;
         glCall(glUniformMatrix4fv(shadowMvLoc, 1, GL_FALSE, tmp.buf));
         glDrawArrays(GL_TRIANGLES, 0, 36*27);
 
@@ -1492,8 +1457,8 @@ struct MyApp
 
         // Render the cube with shadow
         glUniform1i(passThroughShader, 0);
-        MyMatrix cubeMv = fullMv * cubeRot;
-        tmp = l * cubeRot;
+        MyMatrix cubeMv = fullMv * mCubeRot;
+        tmp = l * mCubeRot;
         tmp = p * tmp;
         glUniformMatrix4fv(shadowMvpLoc, 1, GL_FALSE, tmp.buf);
         glUniformMatrix4fv(mvMatrixLocation, 1, GL_FALSE, cubeMv.buf);
