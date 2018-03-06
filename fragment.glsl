@@ -10,9 +10,9 @@ out vec4 color;
 
 uniform sampler2DShadow shadowMap;
 
-const vec3 diffuseColor = vec3(0.3, 0.3, 0.3);
+const vec3 diffuseColor = vec3(0.2, 0.2, 0.2);
 const vec3 specColor = vec3(1.0, 1.0, 1.0);
-const float shininess = 30.0;
+const float shininess = 20.0;
 
 vec2 poissonDisk[16] = vec2[](
    vec2( -0.94201624, -0.39906216 ),
