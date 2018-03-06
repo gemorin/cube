@@ -6,6 +6,7 @@ LDFLAGS=-framework Cocoa -framework OpenGL -lglfw
 
 all: main
 main: main.cpp cube.o
+cube.o: cube.cpp cube.h
 
 clean:
 	rm -rf *.o main main.dSYM

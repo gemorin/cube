@@ -433,7 +433,7 @@ void MyRubik::endRot(int type, bool inv)
     }
 }
 
-void MyRubik::doIncRot(int type, bool inv, float t)
+void MyRubik::doIncRot(int type, float t)
 {
     for (int i = 0; i < 9; ++i) {
         const MyQuaternion& cur = qTransforms[pos[srcIndices[type][i]]];

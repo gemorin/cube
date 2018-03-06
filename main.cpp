@@ -775,7 +775,7 @@ struct MyApp
                 }
             }
             else {
-                rubik.doIncRot(faceRotation.rotType, faceRotation.inverse, t);
+                rubik.doIncRot(faceRotation.rotType, t);
             }
             glUseProgram(program);
             glCall(glUniformMatrix4fv(vertexTransformLocation, 28, GL_FALSE,

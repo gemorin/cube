@@ -97,8 +97,8 @@ struct MyRubik {
     MyCube cubes[27];
     MyCube colors[27];
     MyCube normals[27];
-    MyQuaternion qTransforms[28];
-    MyMatrix mTransforms[28];
+    MyQuaternion qTransforms[27];
+    MyMatrix mTransforms[27];
     int pos[27];
     MyPoint faceNormal[6];
     MyQuaternion faceRotationEnd[9];
@@ -135,7 +135,7 @@ struct MyRubik {
     MyQuaternion rotTypeToQuat(int type);
 
     void startRot(int type, bool inv);
-    void doIncRot(int type, bool inv, float t);
+    void doIncRot(int type, float t);
     void endRot(int type, bool inv = false);
 
     constexpr float radius() const { return 0.40f; }
