@@ -99,6 +99,7 @@ struct MyApp
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
         glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
         glfwWindowHint(GLFW_SAMPLES, 4);
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
         window = glfwCreateWindow(800, 600, "CubeSolver",
                                   NULL, nullptr);
@@ -110,7 +111,7 @@ struct MyApp
         glfwMakeContextCurrent(window);
         glfwSetWindowSizeCallback(window, glfw_onResize);
         glfwSetKeyCallback(window, glfw_onKey);
-        glfwSetCursorPosCallback(window, glfw_onMouseMove);
+        //glfwSetCursorPosCallback(window, glfw_onMouseMove);
 
         glfwGetFramebufferSize(window, &windowWidth, &windowHeight);
 

@@ -18,22 +18,13 @@ void MyMatrix::print()
            get(3, 0), get(3, 1), get(3, 2), get(3, 3));
 }
 
-// column major ordering ... confusing
-float MyMatrix::get(unsigned char row, unsigned char col) const
-{
-    return buf[4*col + row];
-}
-
-void MyMatrix::set(unsigned char row, unsigned char col, const float f)
-{
-    buf[4*col + row] = f;
-}
 
 void MyMatrix::reset()
 {
     MyMatrix n;
     memcpy(buf,n.buf, sizeof(buf));
 }
+
 MyMatrix& MyMatrix::rotateX(const double angleInRad)
 {
     set(1, 1, cosf(angleInRad));
@@ -86,43 +77,6 @@ MyMatrix MyMatrix::transpose() const
     return ret;
 }
 
-MyPoint MyPoint::operator+(const MyPoint &rhs) const
-{
-    MyPoint ret = *this;
-    ret.x += rhs.x;
-    ret.y += rhs.y;
-    ret.z += rhs.z;
-
-    return ret;
-}
-MyPoint MyPoint::operator-(const MyPoint &rhs) const
-{
-    MyPoint ret = *this;
-    ret.x -= rhs.x;
-    ret.y -= rhs.y;
-    ret.z -= rhs.z;
-
-    return ret;
-}
-MyPoint& MyPoint::operator+=(const MyPoint &rhs)
-{
-    x += rhs.x;
-    y += rhs.y;
-    z += rhs.z;
-
-    return *this;
-}
-
-MyPoint MyPoint::operator*(float m) const
-{
-    return MyPoint(x * m, y * m, z * m);
-}
-
-MyPoint MyPoint::opposite() const
-{
-    return MyPoint(-x, -y, -z);
-}
-
 void MyPoint::print() const
 {
     printf("%.3f %.3f %.3f\n", x, y, z);
@@ -139,35 +93,6 @@ MyPoint MyPoint::transform(const MyMatrix& m) const
     return ret;
 }
 
-float MyPoint::dot(const MyPoint& rhs) const
-{
-    return x*rhs.x+y*rhs.y+z*rhs.z;
-}
-
-MyPoint MyPoint::cross(const MyPoint& rhs) const
-{
-    MyPoint ret;
-    ret.x = y*rhs.z - z * rhs.y;
-    ret.y = z*rhs.x - x * rhs.z;
-    ret.z = x*rhs.y - y * rhs.x;
-    return ret;
-}
-
-float MyPoint::length() const
-{
-    return sqrtf(x*x+y*y+z*z);
-}
-
-void MyPoint::normalize()
-{
-    float l = length();
-    if (l != 0.0) {
-        x /= l;
-        y /= l;
-        z /= l;
-    }
-}
-
 void MyQuaternion::setRotation(float angle, MyPoint axis)
 {
     w = cosf(angle / 2);
@@ -178,80 +103,6 @@ void MyQuaternion::setRotation(float angle, MyPoint axis)
     z = axis.z * s;
 }
 
-void MyQuaternion::rotateX(float angle)
-{
-    setRotation(angle, MyPoint{1.0f, 0.0f, 0.0f});
-}
-
-void MyQuaternion::rotateY(float angle)
-{
-    MyQuaternion::setRotation(angle, MyPoint{0.0f, 1.0f, 0.0f});
-}
-
-void MyQuaternion::rotateZ(float angle)
-{
-    MyQuaternion::setRotation(angle, MyPoint{0.0f, 0.0f, 1.0f});
-}
-
-float MyQuaternion::magnitude() const
-{
-    return sqrtf(w*w + x*x + y*y + z*z);
-}
-
-void MyQuaternion::toOppositeAxis()
-{
-    x = -x;
-    y = -y;
-    z = -z;
-}
-
-void MyQuaternion::normalize()
-{
-    const float l = magnitude();
-    w /= l;
-    x /= l;
-    y /= l;
-    z /= l;
-}
-
-MyQuaternion MyQuaternion::operator*(float mult) const
-{
-    return MyQuaternion{w*mult, x*mult, y*mult, z*mult};
-}
-
-MyQuaternion& MyQuaternion::operator*=(float mult)
-{
-    w *= mult;
-    x *= mult;
-    y *= mult;
-    z *= mult;
-    return *this;
-}
-
-MyQuaternion MyQuaternion::operator-(const MyQuaternion& rhs) const
-{
-    return MyQuaternion{w-rhs.w,x-rhs.x,y-rhs.y,z-rhs.z};
-}
-
-MyQuaternion MyQuaternion::operator+(const MyQuaternion& rhs) const
-{
-    return MyQuaternion{w+rhs.w,x+rhs.x,y+rhs.y,z+rhs.z};
-}
-
-MyQuaternion MyQuaternion::operator*(const MyQuaternion& rhs) const
-{
-    return MyQuaternion{
-        -x * rhs.x - y * rhs.y - z * rhs.z + w * rhs.w,
-        x * rhs.w + y * rhs.z - z * rhs.y + w * rhs.x,
-        -x * rhs.z + y * rhs.w + z * rhs.x + w * rhs.y,
-        x * rhs.y - y * rhs.x + z * rhs.w + w * rhs.z
-    };
-}
-
-float MyQuaternion::dot(const MyQuaternion& rhs) const
-{
-    return w * rhs.w + x * rhs.x + y * rhs.y + z * rhs.z;
-}
 
 MyMatrix MyQuaternion::toMatrix() const
 {
