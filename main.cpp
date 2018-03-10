@@ -109,6 +109,7 @@ struct MyApp
         }
 
         glfwMakeContextCurrent(window);
+        glfwSetWindowUserPointer(window, this);
         glfwSetWindowSizeCallback(window, glfw_onResize);
         glfwSetKeyCallback(window, glfw_onKey);
         //glfwSetCursorPosCallback(window, glfw_onMouseMove);
@@ -132,20 +133,22 @@ struct MyApp
 
         glfwTerminate();
     }
-    static MyApp *app;
     static void glfw_onResize(GLFWwindow *window, int w, int h)
     {
+        MyApp *app = (MyApp *) glfwGetWindowUserPointer(window);
         app->onResize(w, h);
     }
 
     static void glfw_onKey(GLFWwindow *window, int key, int scancode,
                            int action, int mods)
     {
+        MyApp *app = (MyApp *) glfwGetWindowUserPointer(window);
         app->onKey(key, action);
     }
 
     static void glfw_onMouseMove(GLFWwindow *window, double x, double y)
     {
+        MyApp *app = (MyApp *) glfwGetWindowUserPointer(window);
         app->onMouseMove(x, y);
     }
 
@@ -951,8 +954,6 @@ struct MyApp
 
 int main(void) {
     MyApp app;
-    MyApp::app = &app;
     app.run();
 }
 
-MyApp *MyApp::app;
