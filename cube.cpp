@@ -18,7 +18,6 @@ void MyMatrix::print()
            get(3, 0), get(3, 1), get(3, 2), get(3, 3));
 }
 
-
 void MyMatrix::reset()
 {
     MyMatrix n;
@@ -248,7 +247,6 @@ void MyCube::transform(const MyMatrix& m)
         vertices[i] = vertices[i].transform(m);
     }
 }
-
 
 MyQuaternion MyRubik::rotTypeToQuat(int type)
 {

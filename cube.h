@@ -3,6 +3,7 @@
 #include <cmath>
 
 struct __attribute__((packed)) MyMatrix {
+    // column major layout
     float buf[16] = {
         1.0f, 0.0f, 0.0f, 0.0f,
         0.0f, 1.0f, 0.0f, 0.0f,
