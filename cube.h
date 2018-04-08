@@ -23,6 +23,7 @@ struct __attribute__((packed)) MyMatrix {
     MyMatrix transpose() const;
 };
 
+struct MyQuaternion;
 struct __attribute__((packed)) MyPoint {
     float x,y,z;
 
@@ -33,9 +34,11 @@ struct __attribute__((packed)) MyPoint {
     MyPoint operator-(const MyPoint &rhs) const;
     MyPoint& operator+=(const MyPoint &rhs);
     MyPoint operator*(float m) const;
+    MyPoint& operator*=(float m);
     MyPoint opposite() const;
     void print() const;
     MyPoint transform(const MyMatrix& m) const;
+    MyPoint transform(const MyQuaternion& q) const;
     float dot(const MyPoint& rhs) const;
     MyPoint cross(const MyPoint& rhs) const;
     float length() const;
@@ -90,7 +93,6 @@ struct MyCube {
 
     void addZ(float f);
     void setFace(int face, MyPoint p);
-    void addToFace(int face, MyPoint p);
 
     void set(const MyPoint& center, float radius);
     void transform(const MyMatrix& m);
@@ -194,6 +196,15 @@ inline
 MyPoint MyPoint::operator*(float m) const
 {
     return MyPoint(x * m, y * m, z * m);
+}
+
+inline
+MyPoint& MyPoint::operator*=(float m)
+{
+    x *= m;
+    y *= m;
+    z *= m;
+    return *this;
 }
 
 inline
