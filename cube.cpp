@@ -135,12 +135,12 @@ MyQuaternion
 MyQuaternion::slerp(const MyQuaternion& start, MyQuaternion end, float t)
 {
     float dot = start.dot(end);
-    if (dot < 0) {
+    if (dot < 0.0f) {
         dot = fabs(dot);
         end *= -1.0f;
     }
 
-    if (dot > 0.95) {
+    if (dot > 0.995) {
         MyQuaternion ret = start + (end - start) * t;
         ret.normalize();
         return ret;
